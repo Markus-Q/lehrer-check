@@ -12,8 +12,9 @@ const FIREBASE_CONFIG = {
   appId: "1:355339313897:web:5f02ddd2546f7d65bb8678"
 };
 const FB_VERSION = '10.12.2';
-const BUILD = '13.11.2026 19:29';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
+const BUILD = '13.11.2026 19:46';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
 const LESSON_W = 0.10;   // Anteil der Stunden-Punkte an der Gesamtnote (10 %)
+const LESSON_DAYS = 60;  // Es werden nur Stunden der letzten 60 Tage geladen: spart Lese-Kontingent bei Firebase und hält die Stunden-Stimmung aktuell
 const MIN_N = 3;         // Mindestanzahl Bewertungen (bzw. Schüler bei Stunden), bevor Ergebnisse gezeigt werden
 // Farben als CSS-Variablen, damit sie im Dunkelmodus mitwechseln
 const INK = 'var(--ink)', RED = 'var(--red)', GRAPH = 'var(--gr)';
@@ -309,7 +310,7 @@ function startData(){
   unsubs.data=[
     fb.onSnapshot(fb.collection(db,'teachers'),snap=>{ S.teachers=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.t=true; recomputeReady(); onData(); },failData),
     fb.onSnapshot(fb.collection(db,'ratings'),snap=>{ S.ratings=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.r=true; recomputeReady(); onData(); },failData),
-    fb.onSnapshot(fb.collection(db,'lessons'),snap=>{ S.lessons=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.l=true; recomputeReady(); onData(); },failData)
+    fb.onSnapshot(fb.query(fb.collection(db,'lessons'),fb.where('day','>=',dayKey(new Date(Date.now()-LESSON_DAYS*864e5)))),snap=>{ S.lessons=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.l=true; recomputeReady(); onData(); },failData)
   ];
 }
 function syncAccess(){
@@ -333,7 +334,11 @@ async function startCloud(cfg){
     const auth=authM.getAuth(app);
     const cred=await authM.signInAnonymously(auth);
     UID=cred.user.uid; S.authed=true;
-    const db=fsM.initializeFirestore(app,{experimentalAutoDetectLongPolling:true});
+    // Zwischenspeicher im Browser (IndexedDB): spart Lesevorgänge beim erneuten Öffnen, weil Firestore dann nur Änderungen nachlädt
+    // (gilt, solange der letzte Abruf weniger als ca. 30 Minuten her ist). Klappt der Speicher nicht (z. B. privates Fenster), läuft alles ohne.
+    let db;
+    try{ db=fsM.initializeFirestore(app,{experimentalAutoDetectLongPolling:true,localCache:fsM.persistentLocalCache({tabManager:fsM.persistentMultipleTabManager()})}); }
+    catch{ try{ db=fsM.initializeFirestore(app,{experimentalAutoDetectLongPolling:true}); }catch{ db=fsM.getFirestore(app); } }
     fb={db,...fsM};
     const bossChanged=()=>{
       if(isBoss()&&UNAME!=='BOSS'){ UNAME='BOSS'; ls.set('lc_name','BOSS'); }
@@ -766,7 +771,7 @@ function detailHTML(tid){
   const dayItems=[...byDay].sort((x,y)=>x[0]>y[0]?1:-1).slice(-14).map(([d,v])=>({label:d.slice(8)+'.'+d.slice(5,7),value:mean(v)}));
   const lUsers=new Set(a.ls.map(l=>l.userId)).size;
   const lessonBlock=a.lok?`<div class="d-sec"><h4>Stunden-Punkte</h4>
-      <p class="note">Ø <b style="color:${lessonColor(a.lavg)}">${fmtPts(a.lavg,1)}</b> aus ${a.ln} Stunden-Bewertung${a.ln===1?'':'en'} von ${lUsers} Schüler${lUsers===1?'':'n'}. Zählt ${Math.round(LESSON_W*100)} % der Gesamtnote.</p>
+      <p class="note">Ø <b style="color:${lessonColor(a.lavg)}">${fmtPts(a.lavg,1)}</b> aus ${a.ln} Stunden-Bewertung${a.ln===1?'':'en'} von ${lUsers} Schüler${lUsers===1?'':'n'} (letzte ${LESSON_DAYS} Tage). Zählt ${Math.round(LESSON_W*100)} % der Gesamtnote.</p>
       ${diverge(dayItems)}</div>`
     :a.ln?`<div class="d-sec"><h4>Stunden-Punkte</h4><p class="note">Stunden-Punkte werden ab ${MIN_N} verschiedenen Schülern gezeigt (bisher ${a.lu}).</p></div>`
     :`<div class="d-sec"><h4>Stunden-Punkte</h4><p class="note">Noch keine Stunde bewertet. Unten auf „Stunde“ tippen und der heutigen Stunde −10 bis +10 Punkte geben.</p></div>`;
@@ -1064,7 +1069,9 @@ function legalHTML(doc){
   <h3>Zweck und Rechtsgrundlage</h3>
   <p>Die Klasse tauscht sich über den Unterricht aus und gibt anonymisiert-sachliche Rückmeldungen. Rechtsgrundlage ist unser berechtigtes Interesse an dieser Rückmeldung (Art. 6 Abs. 1 lit. f DSGVO) und bei Schülern die Anfrage selbst (Art. 6 Abs. 1 lit. b bzw. a DSGVO).</p>
   <h3>Wo liegen die Daten?</h3>
-  <p>Bei Google Firebase (Firestore und Authentication), Google Ireland Ltd. bzw. Google LLC. Dabei kann eine Übermittlung in die USA stattfinden. Die Seite selbst wird über GitHub Pages ausgeliefert. Die Seite setzt keine Tracking- oder Werbe-Cookies. Dein Name wird zusätzlich lokal im Browser (localStorage) gespeichert.</p>
+  <p>Bei Google Firebase (Firestore und Authentication), Google Ireland Ltd. bzw. Google LLC. Dabei kann eine Übermittlung in die USA stattfinden. Die Seite selbst wird über GitHub Pages ausgeliefert. Die Seite setzt keine Tracking- oder Werbe-Cookies.</p>
+  <p><b>Schriften:</b> Beim Aufruf lädt dein Browser die Schriften „Gloock“ und „Courier Prime“ von Google Fonts (fonts.googleapis.com und fonts.gstatic.com). Dabei wird deine IP-Adresse an Google übertragen. Rechtsgrundlage ist unser berechtigtes Interesse an einer einheitlichen Darstellung (Art. 6 Abs. 1 lit. f DSGVO).</p>
+  <p><b>Speicherung im Browser:</b> Dein Name bzw. Kürzel und Einstellungen wie Dunkelmodus und Design werden lokal im Browser gespeichert (localStorage). Außerdem legt der Browser die Klassendaten zwischen (IndexedDB), damit die Seite schneller lädt und weniger Daten abgerufen werden müssen. Beides kannst du jederzeit über die Browserdaten löschen.</p>
   <h3>Weitergabe und Dauer</h3>
   <p>Eine Weitergabe an Dritte außerhalb der Klasse und der genannten Dienstleister findet nicht statt. Die Daten bleiben gespeichert, bis die Seite abgeschaltet oder auf Wunsch gelöscht wird.</p>
   <h3>Deine Rechte</h3>
