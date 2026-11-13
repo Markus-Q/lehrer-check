@@ -47,7 +47,6 @@ html{height:100%;overflow:hidden;overscroll-behavior:none}
 .top{flex:none}
 #scroller{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;position:relative;z-index:2;padding-bottom:calc(92px + env(safe-area-inset-bottom))}
 body.android #scroller,body.android .sheet{overscroll-behavior-y:none}
-#app{will-change:transform}
 body.lock #scroller{overflow:hidden}
 button,[data-act],.chip,select,label.search{
   cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26'><circle cx='13' cy='13' r='9' fill='%23bd3022' fill-opacity='.18' stroke='%23bd3022' stroke-width='2.2'/><circle cx='13' cy='13' r='2.4' fill='%23bd3022'/></svg>") 13 13,pointer;
@@ -1366,11 +1365,10 @@ function legalHTML(doc){
     }
     const d=(y-y0)*dir;
     if(d<=0){ active=false; x=0; v=0; draw(); return; }
-    if(e.cancelable) e.preventDefault();
     const nx=dir*rubber(d), dt=Math.max(1,e.timeStamp-mT);
     mV=0.6*mV+0.4*((nx-x)/dt*1000); mT=e.timeStamp;
     x=nx; draw();
-  },{passive:false});
+  },{passive:true});   // passiv: blockiert das native Scrollen nicht (am Rand gibt es nichts zu scrollen)
   const end=e=>{
     if(!touching) return;
     touching=false;
