@@ -12,7 +12,7 @@ const FIREBASE_CONFIG = {
   appId: "1:355339313897:web:5f02ddd2546f7d65bb8678"
 };
 const FB_VERSION = '10.12.2';
-const BUILD = '13.11.2026 20:13';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
+const BUILD = '13.11.2026 20:21';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
 const LESSON_W = 0.10;   // Anteil der Stunden-Punkte an der Gesamtnote (10 %)
 const LESSON_DAYS = 60;  // Es werden nur Stunden der letzten 60 Tage geladen: spart Lese-Kontingent bei Firebase und hält die Stunden-Stimmung aktuell
 const MIN_N = 3;         // Mindestanzahl Bewertungen (bzw. Schüler bei Stunden), bevor Ergebnisse gezeigt werden
@@ -492,7 +492,7 @@ const api={
     if(S.cloud){
       needFb();
       const n=dayNoOf(Date.now()), wk=weekOfDay(n), entry={points:l.points,createdAt:l.createdAt,updatedAt:l.updatedAt};
-      await retryWrite(()=>fb.setDoc(fb.doc(fb.db,'lessonWeeks',`${tid}_${wk}`),{teacherId:tid,week:wk,votes:{[`${UID}_${n}`]:entry}},{merge:true}));
+      await retryWrite(()=>fb.setDoc(fb.doc(fb.db,'lessonWeeks',`${tid}_${wk}`),{teacherId:tid,week:wk,day:n,votes:{[`${UID}_${n}`]:entry}},{merge:true}));
       return;
     }
     const i=S.lessons.findIndex(x=>x.id===id); const row={id,...l};
@@ -503,8 +503,9 @@ const api={
     if(S.cloud){
       needFb();
       const row=S.lessons.find(l=>l.id===id); if(!row) return;
-      const n=dayNoOfIso(row.day), wk=weekOfDay(n);
-      await retryWrite(()=>fb.updateDoc(fb.doc(fb.db,'lessonWeeks',`${row.teacherId}_${wk}`),new fb.FieldPath('votes',`${row.userId}_${n}`),fb.deleteField()));
+      const n=dayNoOfIso(row.day), wk=weekOfDay(n), today=dayNoOf(Date.now());
+      // day wird mit dem heutigen Tag neu gesetzt, damit die Regeln den Schreibzeitpunkt prüfen können
+      await retryWrite(()=>fb.updateDoc(fb.doc(fb.db,'lessonWeeks',`${row.teacherId}_${wk}`),new fb.FieldPath('votes',`${row.userId}_${n}`),fb.deleteField(),'day',today));
       return;
     }
     S.lessons=S.lessons.filter(l=>l.id!==id); lsSave(); onData();
@@ -961,10 +962,15 @@ service cloud.firestore {
     // Zeitstempel (Millisekunden): eine Zahl, nicht in der Zukunft; "jetzt" höchstens 2 Tage neben der Serverzeit
     function pastOk(v) { return v is number && v > 0 && v <= request.time.toMillis() + 172800000; }
     function nowOk(v) { return pastOk(v) && v >= request.time.toMillis() - 172800000; }
-    // Tages- und Wochenzahl (UTC) wie in der App: tagNr = Tage seit 1.1.1970, wochenNr = Woche Montag bis Sonntag
-    function dayNo() { return math.floor(request.time.toMillis() / 86400000); }
-    function weekNo() { return math.floor((dayNo() + 3) / 7); }
-    function voteKey() { return request.auth.uid + '_' + string(dayNo()); }
+    // Tageszahl (Tage seit 1.1.1970, UTC) und Wochenzahl (Montag bis Sonntag) meldet die App als ganze Zahl mit.
+    // Die Regeln rechnen nur mit Ganzzahlen nach: Die Tageszahl muss zur Serverzeit passen, die Woche zur Tageszahl.
+    function dayOk(d) {
+      return d is int
+             && d * 86400000 <= request.time.toMillis()
+             && request.time.toMillis() < (d + 1) * 86400000;
+    }
+    function weekOk(w, d) { return w is int && w * 7 - 3 <= d && d <= w * 7 + 3; }
+    function myVoteKey() { return request.auth.uid + '_' + string(request.resource.data.day); }
     // Eine einzelne Bewertung innerhalb von teacherRatings/{lehrerId}.byUser.{uid}
     function ratingOk(e) {
       return e is map
@@ -1075,29 +1081,33 @@ service cloud.firestore {
     }
 
     // Stunden-Punkte: ein Dokument pro Lehrer und Woche, darin pro Person und Tag ein Eintrag (votes). Es zählt nur der heutige Tag (UTC).
+    // day = Tageszahl des letzten Schreibers (nur zur Prüfung), week = Wochenzahl, Schlüssel eines Eintrags = uid_tageszahl.
     match /lessonWeeks/{id} {
       allow read: if isMember();
       allow create: if isMember()
-                    && request.resource.data.keys().hasOnly(['teacherId','week','votes'])
+                    && request.resource.data.keys().hasOnly(['teacherId','week','day','votes'])
                     && request.resource.data.teacherId is string
                     && request.resource.data.teacherId.size() <= 40
                     && exists(teacherPath(request.resource.data.teacherId))
-                    && request.resource.data.week == weekNo()
-                    && id == request.resource.data.teacherId + '_' + string(weekNo())
-                    && request.resource.data.votes.keys().hasOnly([voteKey()])
-                    && voteOk(request.resource.data.votes[voteKey()]);
+                    && dayOk(request.resource.data.day)
+                    && weekOk(request.resource.data.week, request.resource.data.day)
+                    && id == request.resource.data.teacherId + '_' + string(request.resource.data.week)
+                    && request.resource.data.votes.keys().hasOnly([myVoteKey()])
+                    && voteOk(request.resource.data.votes[myVoteKey()]);
       allow update: if isMember()
-                    && request.resource.data.keys().hasOnly(['teacherId','week','votes'])
+                    && request.resource.data.keys().hasOnly(['teacherId','week','day','votes'])
                     && request.resource.data.teacherId == resource.data.teacherId
                     && request.resource.data.week == resource.data.week
-                    && request.resource.data.week == weekNo()
-                    && request.resource.data.votes.diff(resource.data.votes).affectedKeys().hasOnly([voteKey()])
-                    && (!(voteKey() in request.resource.data.votes)
-                        || voteOk(request.resource.data.votes[voteKey()]));
+                    && dayOk(request.resource.data.day)
+                    && weekOk(request.resource.data.week, request.resource.data.day)
+                    && request.resource.data.votes.diff(resource.data.votes).affectedKeys().hasOnly([myVoteKey()])
+                    && (!(myVoteKey() in request.resource.data.votes)
+                        || voteOk(request.resource.data.votes[myVoteKey()]));
       // Der BOSS darf fremde Stunden-Bewertungen nur entfernen
       allow update: if isBoss()
                     && request.resource.data.teacherId == resource.data.teacherId
                     && request.resource.data.week == resource.data.week
+                    && request.resource.data.day == resource.data.day
                     && request.resource.data.votes.diff(resource.data.votes).addedKeys().size() == 0
                     && request.resource.data.votes.diff(resource.data.votes).changedKeys().size() == 0;
       allow delete: if isBoss();
