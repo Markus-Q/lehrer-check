@@ -352,6 +352,10 @@ details p{font-size:13px;margin-top:10px}
 .stampPop span{font-family:var(--disp);font-size:clamp(48px,16vw,100px);line-height:1;text-transform:uppercase;letter-spacing:.03em;color:var(--red);border:6px solid var(--red);outline:3px solid var(--red);outline-offset:6px;padding:.08em .28em;transform:rotate(-9deg);animation:stampIn 1.3s var(--ease) both}
 @keyframes stampIn{0%{opacity:0;transform:rotate(-9deg) scale(2)}16%{opacity:.95;transform:rotate(-9deg) scale(1)}80%{opacity:.95;transform:rotate(-9deg) scale(1)}100%{opacity:0;transform:rotate(-9deg) scale(1.03)}}
 .gated .tabbar{display:none}
+.legal-foot{margin:28px 0 96px;font-size:13px;color:var(--mute);text-align:center}
+.gated .legal-foot{margin-bottom:28px}
+.legal h3{font-family:var(--disp);font-weight:400;font-size:20px;margin:18px 0 4px;color:var(--ink)}
+.legal p{font-size:14px;line-height:1.5;margin:6px 0}
 .mbtns{display:flex;gap:6px;flex:none}
 @media(max-width:380px){.brand{font-size:20px}.hact{gap:6px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -371,6 +375,7 @@ details p{font-size:13px;margin-top:10px}
 <main class="wrap" id="app">
   <div class="banner" id="banner" hidden></div>
   <div id="view" class="view"></div>
+  <p class="legal-foot"><button class="lnk" data-act="legal" data-doc="impressum">Impressum</button> · <button class="lnk" data-act="legal" data-doc="datenschutz">Datenschutz</button></p>
 </main>
 
 <nav class="tabbar" id="tabbar">
@@ -1287,6 +1292,32 @@ service cloud.firestore {
     }
   }
 }`;
+/* >>> HIER AUSFÜLLEN: Angaben für Impressum und Datenschutz <<< */
+const LEGAL={
+  name:'Max Mustermann',                 // dein Vor- und Nachname
+  address:'',                            // optional: Straße, PLZ Ort (leer lassen, wenn du sie nicht veröffentlichen willst)
+  email:'deine-mail@example.com'         // eine Mailadresse, über die man dich erreicht
+};
+function legalHTML(doc){
+  const who=`${esc(LEGAL.name)}${LEGAL.address?`<br>${esc(LEGAL.address)}`:''}<br>E-Mail: ${esc(LEGAL.email)}`;
+  if(doc==='impressum') return `${sheetHead('Impressum')}<div class="legal">
+  <p>Diese Seite ist ein privates, nicht kommerzielles Projekt für eine geschlossene Schulklasse.</p>
+  <h3>Verantwortlich</h3><p>${who}</p></div>`;
+  return `${sheetHead('Datenschutz')}<div class="legal">
+  <h3>Verantwortlicher</h3><p>${who}</p>
+  <h3>Wer darf die Seite nutzen?</h3><p>Nur Mitglieder unserer Klasse. Jeder muss eine Zugangsanfrage stellen, der BOSS lässt Personen einzeln zu. Ohne Freigabe sind keine Bewertungen sichtbar.</p>
+  <h3>Welche Daten werden verarbeitet?</h3>
+  <p><b>Schüler:</b> der gewählte Name oder das Kürzel, eine anonyme Nutzer-ID (Firebase Anonymous Auth), Zeitpunkt der Anfrage und der Zulassung, deine Bewertungen und Stundenpunkte. Echte Namen sind nicht nötig, ein Kürzel reicht.</p>
+  <p><b>Lehrkräfte:</b> Anrede und Nachname (z. B. „Frau Müller“), Fächer und die Bewertungen durch die Klasse (Sterne, Stichworte, Punkte pro Stunde). Es gibt keine Freitext-Kommentare.</p>
+  <h3>Zweck und Rechtsgrundlage</h3>
+  <p>Die Klasse tauscht sich über den Unterricht aus und gibt anonymisiert-sachliche Rückmeldungen. Rechtsgrundlage ist unser berechtigtes Interesse an dieser Rückmeldung (Art. 6 Abs. 1 lit. f DSGVO) und bei Schülern die Anfrage selbst (Art. 6 Abs. 1 lit. b bzw. a DSGVO).</p>
+  <h3>Wo liegen die Daten?</h3>
+  <p>Bei Google Firebase (Firestore und Authentication), Google Ireland Ltd. bzw. Google LLC. Dabei kann eine Übermittlung in die USA stattfinden. Die Seite selbst wird über GitHub Pages ausgeliefert. Die Seite setzt keine Tracking- oder Werbe-Cookies. Dein Name wird zusätzlich lokal im Browser (localStorage) gespeichert.</p>
+  <h3>Weitergabe und Dauer</h3>
+  <p>Eine Weitergabe an Dritte außerhalb der Klasse und der genannten Dienstleister findet nicht statt. Die Daten bleiben gespeichert, bis die Seite abgeschaltet oder auf Wunsch gelöscht wird.</p>
+  <h3>Deine Rechte</h3>
+  <p>Du kannst Auskunft, Berichtigung, Löschung, Einschränkung und Widerspruch verlangen (Art. 15–21 DSGVO). Lehrkräfte können jederzeit verlangen, dass ihr Eintrag samt Bewertungen gelöscht wird. Schreib dafür an die E-Mail oben. Außerdem hast du das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren.</p></div>`;
+}
 function settingsHTML(){
   const cfg=getCfg();
   const status=!S.cloud?'Lokaler Modus. Daten bleiben nur auf diesem Gerät, jeder darf Lehrer verwalten.'
@@ -1330,6 +1361,7 @@ function renderSheet(first,still){
     case 'teacher': inner=teacherFormHTML(); break;
     case 'settings': inner=settingsHTML(); break;
     case 'name': inner=nameHTML(); break;
+    case 'legal': inner=legalHTML(SHEET.id); break;
   }
   const html=`<div class="si ${still?'still':''}">${inner}</div>`;
   if(first||!$('.sheet',root)){
@@ -1399,6 +1431,7 @@ const H={
   close(){ closeSheet(); },
   backdrop(el,e){ if(e.target!==el) return; if(nameLocked()) return; closeSheet(); },
   settings(){ openSheet('settings'); },
+  legal(el){ openSheet('legal',el.dataset.doc); },
   subj(el){ S.subj=el.dataset.s; renderChips(); renderList(true); },
 
   'add-teacher'(){
