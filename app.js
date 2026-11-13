@@ -1075,7 +1075,7 @@ function legalHTML(doc){
   document.body.classList.add('android');
   const W=13;                                           // Rückfeder-Tempo, kein Nachschwingen
   let sc=null, el=null;                                 // aktueller Scrollbereich und sein Inhalt
-  let x=0,v=0,raf=0;
+  let x=0,v=0,anim=null,sp=null;                        // anim = laufende Feder-Animation (läuft auf dem Compositor), sp = ihre Parameter
   let y0=0,dir=0,active=false,touching=false;
   let mT=0,mV=0;
   let xs=[];                                             // letzte Verschiebungen mit Zeitstempel (für das Loslass-Tempo)
@@ -1087,25 +1087,32 @@ function legalHTML(doc){
   // und beim Entfernen der Verschiebung am Ende rastet das Bild sichtbar ein.
   const tr=v=>{ const r=window.devicePixelRatio||1; return v?`translate3d(0,${(Math.round(v*r)/r).toFixed(3)}px,0)`:''; };
   const draw=()=>{ if(el) el.style.transform=tr(x); };
-  const stop=()=>{ cancelAnimationFrame(raf); raf=0; };
+  // Aktueller Stand der laufenden Feder (geschlossene Lösung, gleiche Formel wie die Animation)
+  const cur=()=>{ if(!sp) return {x,v}; const t=Math.max(0,(performance.now()-sp.t0)/1000), e=Math.exp(-W*t); return {x:(sp.A+sp.B*t)*e, v:(sp.B-W*(sp.A+sp.B*t))*e}; };
+  // Feder anhalten und den aktuellen Stand fest übernehmen (z. B. wenn der Finger sie wieder greift)
+  const stop=()=>{ if(!anim) return; const c=cur(), tg=sp.target; x=c.x; v=c.v; anim.onfinish=null; anim.cancel(); anim=null; sp=null; if(tg) tg.style.transform=tr(x); };
   const reset=()=>{ stop(); x=0; v=0; draw(); };
   const findSc=t=>{ const n=t&&t.closest?t.closest('.sheet,#scroller'):null; return n; };
   const contentOf=n=>n.id==='scroller'?document.getElementById('app'):n.firstElementChild;
+  const finish=()=>{ const an=anim, tg=sp&&sp.target; anim=null; sp=null; x=0; v=0; pinDir=0; if(an) an.cancel(); if(tg) tg.style.transform=''; };
+  /* Das Zurückfedern läuft als Web-Animation auf dem Compositor statt per Bild-für-Bild-Schleife im Hauptthread: Es ruckelt nicht mehr,
+     wenn der Hauptthread gerade beschäftigt ist (Garbage Collection, Firestore-Updates, Layout). Die Kurve ist die exakte Feder-Lösung,
+     abgetastet in Schritten von 1/120 s (auf ganze Geräte-Pixel gerundet). */
   function spring(){
     stop();
-    const target=el, A=x, B=v+W*x, t0=performance.now();
-    const step=now=>{
-      // Der Bild-Zeitstempel kann vor performance.now() liegen (z. B. beim Start aus dem Scroll-Ereignis): t darf nie negativ sein,
-      // sonst springt die erste Feder-Position ein paar Pixel in die Gegenrichtung.
-      const t=Math.max(0,(now-t0)/1000), e=Math.exp(-W*t);
-      x=(A+B*t)*e; v=(B-W*(A+B*t))*e;
-      if(target) target.style.transform=tr(x);
-      // Beim Zurückfedern ohne Finger nicht nativ nachscrollen lassen (sonst läuft ein nativer Schwung gegen die Feder)
-      if(pinDir&&!touching&&sc){ const edge=pinDir>0?0:pinMax; if(Math.abs(sc.scrollTop-edge)>0.5) sc.scrollTop=edge; }
-      if(t>1.4||(Math.abs(x)<0.15&&Math.abs(v)<4)){ x=0; v=0; pinDir=0; if(target) target.style.transform=''; raf=0; return; }
-      raf=requestAnimationFrame(step);
-    };
-    raf=requestAnimationFrame(step);
+    const target=el, A=x, B=v+W*x;
+    if(!target||!target.animate){ x=0; v=0; pinDir=0; if(target) target.style.transform=''; return; }
+    const kf=[]; let t=0;
+    for(;;){
+      const e=Math.exp(-W*t), xx=(A+B*t)*e, vv=(B-W*(A+B*t))*e;
+      kf.push({transform:tr(xx)||'translate3d(0,0,0)'});
+      if(t>=1.4||(t>0.05&&Math.abs(xx)<0.15&&Math.abs(vv)<4)) break;
+      t+=1/120;
+    }
+    kf[kf.length-1]={transform:'translate3d(0,0,0)'};
+    sp={A,B,t0:performance.now(),target};
+    anim=target.animate(kf,{duration:Math.max(16,(kf.length-1)*1000/120),easing:'linear',fill:'forwards'});
+    anim.onfinish=finish;
   }
   document.addEventListener('touchstart',e=>{
     if(e.touches.length!==1) return;
@@ -1124,7 +1131,8 @@ function legalHTML(doc){
     if(!active){
       if((dy>0&&top<=0)||(dy<0&&top>=max-1)){
         active=true; dir=dy>0?1:-1; mT=e.timeStamp; mV=0; xs=[]; pinDir=dir; pinMax=max;
-        if(raf&&x*dir>0){
+        const wasSpringing=!!anim; if(wasSpringing) x=cur().x;
+        if(wasSpringing&&x*dir>0){
           // Die Feder läuft noch in dieselbe Richtung: Finger greift sie dort, wo sie gerade ist (Umkehrung der Gummiband-Kurve)
           stop(); const m=DIM(), r=Math.min(Math.abs(x)/m,0.97); y0=y-dir*(r/(1-r))*m/0.6; v=0;
         } else { stop(); y0=y; x=0; v=0; draw(); }
@@ -1155,6 +1163,7 @@ function legalHTML(doc){
     const n=e.target;
     if(!n||!n.classList||!(n.id==='scroller'||n.classList.contains('sheet'))) return;
     const now=performance.now(), top=n.scrollTop, max=n.scrollHeight-n.clientHeight;
+    if(anim&&pinDir&&!touching&&n===sc){ const edge=pinDir>0?0:pinMax; if(Math.abs(top-edge)>0.5){ n.scrollTop=edge; lastTop=edge; return; } }
     if(n!==lastSc){ lastSc=n; hist.length=0; lastTop=top; lastV=0; }
     hist.push({top,t:now}); while(hist.length>2&&now-hist[0].t>110) hist.shift();
     const h0=hist[0], vel=(top-h0.top)/Math.max(1,now-h0.t);
