@@ -14,7 +14,9 @@ const FIREBASE_CONFIG = {
 };
 const FB_VERSION = '10.12.2';
 const LESSON_W = 0.10;   // Anteil der Stunden-Punkte an der Gesamtnote (10 %)
-const INK = '#1b2a6b', RED = '#bd3022', GRAPH = '#26251f';
+const MIN_N = 3;         // Mindestanzahl Bewertungen (bzw. Schüler bei Stunden), bevor Ergebnisse gezeigt werden
+// Farben als CSS-Variablen, damit sie im Dunkelmodus mitwechseln
+const INK = 'var(--ink)', RED = 'var(--red)', GRAPH = 'var(--gr)';
 
 /* ---------- Kriterien (Reihenfolge = Reihenfolge im Radar) ---------- */
 const CRIT = [
@@ -73,6 +75,14 @@ const ls = {
   set(k,v){ try{ localStorage.setItem(k,v); }catch{} },
   del(k){ try{ localStorage.removeItem(k); }catch{} }
 };
+/* Dunkelmodus: nur lokal im Browser gespeichert (lc_theme), folgt bewusst nicht der Geräteeinstellung */
+const isDark = ()=>ls.get('lc_theme')==='dark';
+function applyTheme(){
+  const d=isDark();
+  document.documentElement.dataset.theme=d?'dark':'light';
+  $('meta[name=theme-color]')?.setAttribute('content',d?'#1c1b17':'#efe8d6');
+  $('meta[name=color-scheme]')?.setAttribute('content',d?'dark':'light');
+}
 const withTimeout = (p,ms=10000)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Zeitüberschreitung – bist du online?')),ms))]);
 
 /* ---------- Identität (lokal pro Gerät; in der Cloud = Firebase-Anonym-ID) ---------- */
@@ -88,13 +98,14 @@ let NAME_MSG = '';
 const S = {
   teachers:[], ratings:[], lessons:[], A:new Map(),
   tab:'teachers', q:'', subj:'Alle', sort:'overall', cmp:[],
-  cloud:false, mode:'local', ready:false, authed:false, err:'', boss:null, me:null, members:[], askedName:false,
-  _got:{t:false,r:false,l:false,b:false,m:false}
+  cloud:false, mode:'local', ready:false, authed:false, err:'', boss:null, bossDev:false, me:null, members:[], askedName:false,
+  _got:{t:false,r:false,l:false,b:false,m:false,d:false}
 };
 const unsubs = {data:[], members:null};
-let SHEET = null, FORM = null, FORM_T = null, FORM_L = null, fb = null;
+let SHEET = null, FORM = null, FORM_T = null, FORM_L = null, fb = null, NEWCODE = '';
 
-const isBoss = ()=>S.cloud && !!S.boss && S.boss.uid===UID;
+// BOSS ist, wer das BOSS-Dokument angelegt hat oder sich mit einem gültigen BOSS-Code angemeldet hat (S.bossDev)
+const isBoss = ()=>S.cloud && ((!!S.boss && S.boss.uid===UID) || S.bossDev);
 const canManage = ()=>!S.cloud || isBoss();
 const hasAccess = ()=>!S.cloud || isBoss() || S.me?.status==='approved';
 const nameLocked = ()=>!!SHEET && SHEET.type==='name' && !S.cloud && !UNAME;
@@ -109,19 +120,22 @@ function computeAll(){
   const A=new Map();
   for(const t of S.teachers){
     const rs=rby.get(t.id), n=rs.length, lsn=lby.get(t.id), ln=lsn.length;
+    // Ergebnisse erst ab MIN_N Bewertungen (Stunden: ab MIN_N verschiedenen Schülern), damit niemand einzeln erkennbar ist
+    const ok=n>=MIN_N, lu=new Set(lsn.map(l=>l.userId)).size, lok=lu>=MIN_N;
+    const shown=ok?rs:[];
     const avg={};
-    CRIT.forEach(c=>{ const v=rs.map(r=>Number(r[c.key])).filter(x=>x>0); avg[c.key]=v.length?mean(v):null; });
+    CRIT.forEach(c=>{ const v=shown.map(r=>Number(r[c.key])).filter(x=>x>0); avg[c.key]=v.length?mean(v):null; });
     const cv=CRIT.map(c=>avg[c.key]).filter(v=>v!=null);
     const crit=cv.length?mean(cv):null;
-    const lavg=ln?mean(lsn.map(l=>Number(l.points)||0)):null;
+    const lavg=lok?mean(lsn.map(l=>Number(l.points)||0)):null;
     const lstars=lavg==null?null:(lavg+10)/20*4+1;
-    const overall=(n&&crit!=null)?(lstars!=null?crit*(1-LESSON_W)+lstars*LESSON_W:crit):null;
-    const per=rs.map(ovr);
+    const overall=(ok&&crit!=null)?(lstars!=null?crit*(1-LESSON_W)+lstars*LESSON_W:crit):null;
+    const per=shown.map(ovr);
     const dist=[0,0,0,0,0]; per.forEach(p=>{ dist[clamp(Math.round(p),1,5)-1]++; });
-    const rv=rs.filter(r=>typeof r.rec==='boolean');
+    const rv=shown.filter(r=>typeof r.rec==='boolean');
     const recN=rv.length, recYes=rv.filter(r=>r.rec).length;
-    const tags=new Map(); rs.forEach(r=>(r.tags||[]).forEach(id=>tags.set(id,(tags.get(id)||0)+1)));
-    A.set(t.id,{t,rs,n,avg,crit,overall,dist,std:stdev(per),ls:lsn,ln,lavg,lstars,recN,recPct:recN?recYes/recN*100:null,tags});
+    const tags=new Map(); shown.forEach(r=>(r.tags||[]).forEach(id=>tags.set(id,(tags.get(id)||0)+1)));
+    A.set(t.id,{t,rs,n,ok,lok,lu,avg,crit,overall,dist,std:stdev(per),ls:lsn,ln,lavg,lstars,recN,recPct:recN>=MIN_N?recYes/recN*100:null,tags});
   }
   S.A=A;
 }
@@ -145,11 +159,11 @@ const allSubjects = ()=>[...new Set(S.teachers.flatMap(t=>t.subjects||[]))].sort
 function subjectStats(){
   const m=new Map();
   for(const r of S.ratings){
-    const a=S.A.get(r.teacherId); if(!a) continue;
+    const a=S.A.get(r.teacherId); if(!a||!a.ok) continue;
     const subs=r.subject?[r.subject]:(a.t.subjects||[]);
     subs.forEach(s=>{ if(!m.has(s)) m.set(s,[]); m.get(s).push(r); });
   }
-  return [...m].map(([s,rs])=>({
+  return [...m].filter(([,rs])=>rs.length>=MIN_N).map(([s,rs])=>({
     s, n:rs.length, overall:mean(rs.map(ovr)),
     avg:Object.fromEntries(CRIT.map(c=>[c.key,mean(rs.map(r=>Number(r[c.key])).filter(x=>x>0))]))
   })).sort((a,b)=>b.overall-a.overall);
@@ -173,8 +187,8 @@ const title = (a,b)=>`<h2 class="vt">${a}${b?`<span class="l2">${b}</span>`:''}<
 const emptyBlock = (t,x,b='')=>`<div class="empty"><h3>${t}</h3><p>${x}</p>${b}</div>`;
 function heatStyle(v){
   if(v==null) return '';
-  if(v>=3) return `background:rgba(27,42,107,${(0.05+(v-3)/2*0.33).toFixed(2)})`;
-  return `background:rgba(189,48,34,${(0.08+(3-v)/2*0.30).toFixed(2)})`;
+  if(v>=3) return `background:rgba(var(--ink-rgb),${(0.05+(v-3)/2*0.33).toFixed(2)})`;
+  return `background:rgba(var(--red-rgb),${(0.08+(3-v)/2*0.30).toFixed(2)})`;
 }
 const critLabel = c=>`<span class="hno">${c.no}</span>${esc(c.name)}`;
 const hbar = (label,value,max,right)=>`<div class="hrow"><div class="hl">${label}</div><div class="hb"><i style="--w:${value==null?0:(value/max*100).toFixed(1)}%"></i></div><div class="hv">${right}</div></div>`;
@@ -203,7 +217,7 @@ function radarSVG(series){
   series.forEach((se,si)=>{
     if(se.vals.every(v=>v==null)) return;
     const vals=se.vals.map(v=>v==null?0:v);
-    s+=`<polygon points="${vals.map((v,i)=>P(pt(i,v))).join(' ')}" class="rpoly" style="fill:${se.color}22;stroke:${se.color};${se.dash?'stroke-dasharray:7 5;':''}animation-delay:${si*.1}s"/>`;
+    s+=`<polygon points="${vals.map((v,i)=>P(pt(i,v))).join(' ')}" class="rpoly" style="fill:${se.color};fill-opacity:.13;stroke:${se.color};${se.dash?'stroke-dasharray:7 5;':''}animation-delay:${si*.1}s"/>`;
     vals.forEach((v,i)=>{ const [x,y]=pt(i,v); s+=`<rect x="${(x-3.5).toFixed(1)}" y="${(y-3.5).toFixed(1)}" width="7" height="7" fill="${se.color}"/>`; });
   });
   CRIT.forEach((c,i)=>{
@@ -280,7 +294,7 @@ const failData = e=>{ if(hasAccess()) cloudFail(e); };
 function recomputeReady(){
   if(S.mode==='error') return;
   const acc=hasAccess();
-  S.ready = !!(S._got.b && S._got.m && (!acc || (S._got.t && S._got.r && S._got.l)));
+  S.ready = !!(S._got.b && S._got.m && S._got.d && (!acc || (S._got.t && S._got.r && S._got.l)));
 }
 function stopData(){
   unsubs.data.forEach(f=>{ try{ f(); }catch{} }); unsubs.data=[];
@@ -305,7 +319,7 @@ function syncAccess(){
   }
 }
 async function startCloud(cfg){
-  S.mode='cloud'; S.ready=false; S.authed=false; S._got={t:false,r:false,l:false,b:false,m:false};
+  S.mode='cloud'; S.ready=false; S.authed=false; S._got={t:false,r:false,l:false,b:false,m:false,d:false};
   onData();
   setTimeout(()=>{ if(!S.ready && S.cloud){ S.mode='error'; S.err='Keine Antwort von Firebase. Offline oder Konfiguration falsch?'; S.ready=true; onData(); } },12000);
   try{
@@ -317,11 +331,23 @@ async function startCloud(cfg){
     UID=cred.user.uid; S.authed=true;
     const db=fsM.initializeFirestore(app,{experimentalAutoDetectLongPolling:true});
     fb={db,...fsM};
-    fsM.onSnapshot(fsM.doc(db,'meta','boss'),snap=>{
-      S.boss=snap.exists()?snap.data():null; S._got.b=true;
+    const bossChanged=()=>{
       if(isBoss()&&UNAME!=='BOSS'){ UNAME='BOSS'; ls.set('lc_name','BOSS'); }
       syncAccess(); recomputeReady(); onData();
+    };
+    fsM.onSnapshot(fsM.doc(db,'meta','boss'),snap=>{
+      S.boss=snap.exists()?snap.data():null; S._got.b=true; bossChanged();
     },cloudFail);
+    // BOSS-Code: Dieses Gerät ist BOSS, solange sein eingelöster Code noch existiert
+    // Fehler hier (z. B. Regeln noch nicht aktualisiert) legen nicht die ganze Seite lahm: dann gilt „kein Code-BOSS“
+    let codeUnsub=null;
+    const noCode=()=>{ S.bossDev=false; S._got.d=true; bossChanged(); };
+    fsM.onSnapshot(fsM.doc(db,'bossDevices',UID),snap=>{
+      const code=snap.exists()?snap.data().code:null;
+      if(codeUnsub){ codeUnsub(); codeUnsub=null; }
+      if(!code){ noCode(); return; }
+      codeUnsub=fsM.onSnapshot(fsM.doc(db,'bossCodes',code),s2=>{ S.bossDev=s2.exists(); S._got.d=true; bossChanged(); },noCode);
+    },noCode);
     fsM.onSnapshot(fsM.doc(db,'members',UID),snap=>{
       S.me=snap.exists()?snap.data():null; S._got.m=true;
       if(S.me&&S.me.name&&!isBoss()&&UNAME!==S.me.name){ UNAME=S.me.name; ls.set('lc_name',UNAME); }
@@ -337,6 +363,25 @@ function startLocal(){
 async function claimBoss(){
   if(!fb) throw new Error('Keine Verbindung zu Firebase');
   await withTimeout(fb.setDoc(fb.doc(fb.db,'meta','boss'),{uid:UID,name:'BOSS',createdAt:Date.now()}));
+}
+
+/* BOSS-Code: 40 Zeichen (A–Z, 2–7) = 200 Bit Zufall, nicht erratbar. Der Code ist die ID eines Dokuments in bossCodes. */
+const CODE_RE=/^[A-Z2-7]{40}$/;
+const normCode = v=>String(v||'').toUpperCase().replace(/[^A-Z2-7]/g,'');
+const fmtCode = c=>c.match(/.{1,5}/g).join('-');
+function genCode(){
+  const b=new Uint8Array(40); crypto.getRandomValues(b);
+  return Array.from(b,x=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'[x&31]).join('');
+}
+// Neuen Code anlegen und alle alten ungültig machen. Der aktuelle Browser bleibt BOSS.
+async function rotateBossCode(){
+  needFb();
+  const code=genCode(), db=fb.db;
+  await withTimeout(fb.setDoc(fb.doc(db,'bossCodes',code),{createdAt:Date.now(),createdBy:UID}));
+  if(!(S.boss&&S.boss.uid===UID)) await withTimeout(fb.setDoc(fb.doc(db,'bossDevices',UID),{uid:UID,code,createdAt:Date.now()}));
+  const old=await withTimeout(fb.getDocs(fb.collection(db,'bossCodes')));
+  await Promise.all(old.docs.filter(d=>d.id!==code).map(d=>withTimeout(fb.deleteDoc(d.ref))));
+  return code;
 }
 
 /* ---------- API ---------- */
@@ -456,11 +501,11 @@ function teacherCard(a,i){
   const t=a.t, mine=myRating(t.id);
   const meta=[];
   if(a.recPct!=null) meta.push(`<span class="mt">Empfehlung <b>${Math.round(a.recPct)} %</b></span>`);
-  if(a.ln) meta.push(`<span class="mt">Stunden <b style="color:${lessonColor(a.lavg)}">${fmtPts(a.lavg,1)}</b></span>`);
+  if(a.lok) meta.push(`<span class="mt">Stunden <b style="color:${lessonColor(a.lavg)}">${fmtPts(a.lavg,1)}</b></span>`);
   const bd=badgesFor(a).slice(0,3);
   return `<article class="trow" data-act="open" data-id="${esc(t.id)}" style="--i:${Math.min(i,14)}">
     <div class="tr-info"><span class="nr">Nr. ${String(i+1).padStart(2,'0')}</span><h3 class="tr-name"><span>${esc(t.name)}</span></h3><div class="tr-sub">${esc((t.subjects||[]).join(' · '))}</div></div>
-    <div class="grade">${a.n?`${RING}<b>${fmt(a.overall)}</b><small>von 5</small>`:'<b class="none">–</b><small>offen</small>'}</div>
+    <div class="grade">${a.ok?`${RING}<b>${fmt(a.overall)}</b><small>von 5</small>`:`<b class="none">–</b><small>${a.n?`${a.n}/${MIN_N}`:'offen'}</small>`}</div>
     <div class="tr-bars">${CRIT.map(c=>`<div class="ar"><i>${c.no}</i><span>${c.short}</span>${boxes(a.avg[c.key],'xs')}<em>${fmt(a.avg[c.key])}</em></div>`).join('')}</div>
     <div class="tr-meta">${meta.join('')}${bd.map((b,k)=>`<span class="stamp s${k%3}">${esc(b)}</span>`).join('')}</div>
     <div class="tr-foot"><span class="cnt">${a.n} Bewertung${a.n===1?'':'en'}</span><span class="${mine?'done':'cta'}">${mine?'bewertet':'Bewerten'}</span><button class="qbtn" data-act="lesson" data-id="${esc(t.id)}">Stunde</button></div>
@@ -469,7 +514,7 @@ function teacherCard(a,i){
 function viewTeachers(){
   const opts=[['overall','Beste Gesamtnote'],...CRIT.map(c=>[c.key,`${c.no} ${c.name}`]),['rec','Weiterempfehlung'],['lessons','Stunden-Punkte'],['n','Meiste Bewertungen'],['name','A bis Z']];
   return `<h2 class="vt">Zeugnis<span class="l2">für <em>Lehrer${UL}</em></span></h2>
-  <p class="lede">Sieben Aufgaben pro Lehrer: Kästchen ankreuzen, fertig. Pro Schultag gibt es zusätzlich Stunden-Punkte von −10 bis +10.</p>
+  <p class="lede">Sieben Aufgaben pro Lehrer: Kästchen ankreuzen, fertig. Pro Schultag gibt es zusätzlich Stunden-Punkte von −10 bis +10. Ergebnisse erscheinen ab ${MIN_N} Bewertungen, damit niemand einzeln erkennbar ist.</p>
   <div class="toolbar">
     <label class="search"><span class="lab">Suche</span><input id="q" type="search" placeholder="Name oder Fach" value="${esc(S.q)}" autocomplete="off"></label>
     <select id="sort" class="sel" aria-label="Sortierung">${opts.map(([v,l])=>`<option value="${v}" ${S.sort===v?'selected':''}>${l}</option>`).join('')}</select>
@@ -520,33 +565,34 @@ function renderList(anim=true){
 }
 
 function viewStats(){
-  const rs=S.ratings.filter(r=>S.A.has(r.teacherId));
-  if(!rs.length) return title('Auswertung')+emptyBlock('Noch nichts da.','Sobald die ersten Bewertungen eingegangen sind, erscheinen hier Diagramme, Bestenlisten und Randnotizen.',
+  const rsAll=S.ratings.filter(r=>S.A.has(r.teacherId));
+  const rs=rsAll.filter(r=>S.A.get(r.teacherId).ok);   // nur Lehrer mit genug Bewertungen fließen in die Auswertung ein
+  if(!rs.length) return title('Auswertung')+emptyBlock('Noch nichts da.',rsAll.length?`Die Auswertung erscheint, sobald ein Lehrer mindestens ${MIN_N} Bewertungen hat. So bleibt niemand einzeln erkennbar.`:'Sobald die ersten Bewertungen eingegangen sind, erscheinen hier Diagramme, Bestenlisten und Randnotizen.',
     '<button class="btn primary" data-act="tab" data-tab="teachers">Zu den Lehrern</button>');
-  const all=[...S.A.values()], rated=all.filter(a=>a.n>0);
-  const lessonsAll=S.lessons.filter(l=>S.A.has(l.teacherId));
+  const all=[...S.A.values()], rated=all.filter(a=>a.ok);
+  const lessonsAll=S.lessons.filter(l=>S.A.get(l.teacherId)?.lok);
   const overall=mean(rs.map(ovr));
-  const users=new Set(rs.map(r=>r.userId)).size;
+  const users=new Set(rsAll.map(r=>r.userId)).size;
   const critAvg=CRIT.map(c=>({c,v:mean(rs.map(r=>Number(r[c.key])).filter(x=>x>0))}));
   const ca=critAvg.filter(x=>x.v!=null);
   const dist=[0,0,0,0,0]; rs.forEach(r=>{ dist[clamp(Math.round(ovr(r)),1,5)-1]++; });
-  const pool=(()=>{ const q=rated.filter(a=>a.n>=2); return q.length>=3?q:rated; })();
+  const pool=rated;
   const boards=CRIT.map(c=>{
     const top=[...pool].filter(a=>a.avg[c.key]!=null).sort((x,y)=>(y.avg[c.key]-x.avg[c.key])||(y.n-x.n)).slice(0,3);
     return `<div class="sec"><h3>${c.no} ${esc(c.name)}</h3>${top.map((a,i)=>`<div class="lb" data-act="open" data-id="${esc(a.t.id)}"><span class="medal">${i+1}</span><span class="lbn">${esc(a.t.name)}</span><span class="lbv">${fmt(a.avg[c.key])}</span></div>`).join('')||'<p class="note">Noch keine Daten.</p>'}</div>`;
   }).join('');
-  const recPool=(()=>{ const q=rated.filter(a=>a.recN>=3); return q.length>=2?q:rated.filter(a=>a.recN>=1); })();
+  const recPool=rated.filter(a=>a.recPct!=null);
   const recBoard=recPool.length?`<div class="sec"><h3>Weiterempfehlung</h3>${[...recPool].sort((x,y)=>(y.recPct-x.recPct)||(y.recN-x.recN)).slice(0,3).map((a,i)=>`<div class="lb" data-act="open" data-id="${esc(a.t.id)}"><span class="medal">${i+1}</span><span class="lbn">${esc(a.t.name)}</span><span class="lbv">${Math.round(a.recPct)} %</span></div>`).join('')}</div>`:'';
   const subj=subjectStats();
   const now=Date.now(), WK=7*864e5;
-  const weeks=Array(8).fill(0); rs.forEach(r=>{ const k=Math.floor((now-ts(r))/WK); if(k>=0&&k<8) weeks[k]++; });
+  const weeks=Array(8).fill(0); rsAll.forEach(r=>{ const k=Math.floor((now-ts(r))/WK); if(k>=0&&k<8) weeks[k]++; });
   const wk=weeks.map((v,i)=>({label:i===0?'jetzt':`-${i}W`,value:v})).reverse();
 
   const wsum=Array(8).fill(0), wn=Array(8).fill(0);
   lessonsAll.forEach(l=>{ const t=new Date(l.day+'T12:00:00').getTime(); const k=Math.floor((now-t)/WK); if(k>=0&&k<8){ wsum[k]+=Number(l.points)||0; wn[k]++; } });
   const wavg=wsum.map((s,i)=>wn[i]?s/wn[i]:null).reverse();
   const lAvgAll=mean(lessonsAll.map(l=>Number(l.points)||0));
-  const lp=all.filter(a=>a.ln>=2), lpool=lp.length?lp:all.filter(a=>a.ln>=1);
+  const lpool=all.filter(a=>a.lok);
   const lboard=[...lpool].sort((x,y)=>y.lavg-x.lavg).slice(0,3);
   const lessonSec=lessonsAll.length?`<section class="blk"><h3>Stunden-Punkte</h3>
   <div class="sgrid rev">
@@ -576,9 +622,9 @@ function viewStats(){
   if(subj.length) facts.push(['Bester Fach-Schnitt',`${esc(subj[0].s)} (Ø ${fmt(subj[0].overall)})`]);
   const since=now-30*864e5, mm=new Map();
   rs.filter(r=>ts(r)>=since).forEach(r=>{ if(!mm.has(r.teacherId)) mm.set(r.teacherId,[]); mm.get(r.teacherId).push(ovr(r)); });
-  const mbest=[...mm].filter(([,v])=>v.length>=2).map(([id,v])=>({t:S.A.get(id).t,v:mean(v),n:v.length})).sort((a,b)=>b.v-a.v)[0];
+  const mbest=[...mm].filter(([,v])=>v.length>=MIN_N).map(([id,v])=>({t:S.A.get(id).t,v:mean(v),n:v.length})).sort((a,b)=>b.v-a.v)[0];
   if(mbest) facts.push(['Lehrer des Monats',`${esc(mbest.t.name)} (Ø ${fmt(mbest.v)} in den letzten 30 Tagen)`]);
-  const mood=all.filter(a=>a.ln>=3).sort((a,b)=>b.lavg-a.lavg)[0];
+  const mood=all.filter(a=>a.lok).sort((a,b)=>b.lavg-a.lavg)[0];
   if(mood) facts.push(['Stimmungsmacher',`${esc(mood.t.name)} (Ø ${fmtPts(mood.lavg,1)} Stunden-Punkte)`]);
   if(tagList[0]) facts.push(['Meistvergebener Tag',`${esc(tagLabel(tagList[0][0]))} (${tagList[0][1]}×)`]);
 
@@ -588,7 +634,7 @@ function viewStats(){
     <div class="kpi lead"><b>${fmt(overall)}</b><span>Ø Sterne über alle Kriterien</span></div>
     <div class="kpi3">
       <div class="kpi"><b>${S.teachers.length}</b><span>Lehrer</span></div>
-      <div class="kpi"><b>${rs.length}</b><span>Bewertungen</span></div>
+      <div class="kpi"><b>${rsAll.length}</b><span>Bewertungen</span></div>
       <div class="kpi"><b>${users}</b><span>Bewerter</span></div>
     </div>
   </div>
@@ -621,7 +667,7 @@ function viewCompare(){
     const getv=(a,key)=>key==='overall'?a.overall:key==='rec'?a.recPct:key==='lessons'?a.lavg:a.avg[key];
     const best=key=>{ const vs=sel.map(a=>getv(a,key)).filter(v=>v!=null); return vs.length?Math.max(...vs):null; };
     const row=(label,key,f=v=>fmt(v))=>{ const b=best(key); return `<tr><td>${label}</td>${sel.map(a=>{ const v=getv(a,key); return `<td class="${sel.length>1&&v!=null&&v===b?'best':''}">${v==null?'–':f(v)}</td>`; }).join('')}</tr>`; };
-    const winner=sel.length>1?[...sel].filter(a=>a.n>0).sort((x,y)=>y.overall-x.overall)[0]:null;
+    const winner=sel.length>1?[...sel].filter(a=>a.ok).sort((x,y)=>y.overall-x.overall)[0]:null;
     body=`<div class="sec" style="margin-top:8px">${radarSVG(sel.map((a,i)=>({vals:CRIT.map(c=>a.avg[c.key]),color:COL[i],dash:i===2})))}${legend}
       ${winner?`<div class="winner">${esc(winner.t.name)} liegt vorn, Ø ${fmt(winner.overall)}.</div>`:''}
       <table class="cmpt"><thead><tr><th></th>${sel.map(a=>`<th>${esc(a.t.name)}</th>`).join('')}</tr></thead><tbody>
@@ -666,10 +712,12 @@ function viewMe(){
     <div class="kpi"><b>${fmt(myAvg)}</b><span>Ø von dir</span></div>
   </div>
   ${memberSection()}
+  ${isBoss()?`<section class="blk"><h3>BOSS-Code</h3><p class="note">Mit einem langen Geheimcode kannst du dich auf einem neuen Gerät als BOSS anmelden. Er wird nur einmal angezeigt. Ein neuer Code macht den alten ungültig.</p><button class="btn" data-act="boss-newkey">Neuen BOSS-Code erzeugen</button></section>`:''}
   ${todo.length?`<section class="blk"><h3>Noch nicht bewertet (${todo.length})</h3>${todo.map(a=>`<div class="lrow" data-act="rate" data-id="${esc(a.t.id)}">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${esc((a.t.subjects||[]).join(', '))}</small></div><span class="cta">Bewerten</span></div>`).join('')}</section>`:''}
   ${mine.length?`<section class="blk"><h3>Meine Bewertungen</h3>${mine.map(r=>{ const a=S.A.get(r.teacherId); return `<div class="lrow" data-act="rate" data-id="${esc(a.t.id)}">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDate(ts(r))}${r.subject?' · '+esc(r.subject):''}</small></div>${boxes(ovr(r),'xs')}<span class="pts" style="font-size:20px">${fmt(ovr(r))}</span></div>`; }).join('')}</section>`:''}
   ${myLessons.length?`<section class="blk"><h3>Meine Stunden (zuletzt)</h3>${myLessons.slice(0,8).map(l=>{ const a=S.A.get(l.teacherId); return `<div class="lrow static">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDay(l.day)}</small></div><span class="pts" style="color:${lessonColor(l.points)}">${fmtPts(l.points)}</span></div>`; }).join('')}</section>`:''}
   <section class="blk"><h3>Werkzeuge</h3><div class="tools">
+    <button class="btn" data-act="theme">${isDark()?'Hellmodus':'Dunkelmodus'}</button>
     <button class="btn" data-act="export">Bewertungen als CSV</button>
     <button class="btn" data-act="export-lessons">Stunden als CSV</button>
     <button class="btn" data-act="share">Link teilen</button>
@@ -685,18 +733,21 @@ function detailHTML(tid){
   const a=S.A.get(tid); if(!a) return sheetHead('Nicht gefunden');
   const t=a.t, mine=myRating(tid), manage=canManage();
   const bd=badgesFor(a);
-  const subs=(t.subjects||[]).map(s=>{ const rs=a.rs.filter(r=>r.subject===s); return rs.length?{s,n:rs.length,v:mean(rs.map(ovr))}:null; }).filter(Boolean);
+  const subs=(t.subjects||[]).map(s=>{ const rs=a.rs.filter(r=>r.subject===s); return rs.length>=MIN_N?{s,n:rs.length,v:mean(rs.map(ovr))}:null; }).filter(Boolean);
   const tagList=[...a.tags].sort((x,y)=>y[1]-x[1]).slice(0,8);
   const byDay=new Map(); a.ls.forEach(l=>{ if(!byDay.has(l.day)) byDay.set(l.day,[]); byDay.get(l.day).push(Number(l.points)||0); });
   const dayItems=[...byDay].sort((x,y)=>x[0]>y[0]?1:-1).slice(-14).map(([d,v])=>({label:d.slice(8)+'.'+d.slice(5,7),value:mean(v)}));
   const lUsers=new Set(a.ls.map(l=>l.userId)).size;
-  const lessonBlock=a.ln?`<div class="d-sec"><h4>Stunden-Punkte</h4>
+  const lessonBlock=a.lok?`<div class="d-sec"><h4>Stunden-Punkte</h4>
       <p class="note">Ø <b style="color:${lessonColor(a.lavg)}">${fmtPts(a.lavg,1)}</b> aus ${a.ln} Stunden-Bewertung${a.ln===1?'':'en'} von ${lUsers} Schüler${lUsers===1?'':'n'}. Zählt ${Math.round(LESSON_W*100)} % der Gesamtnote.</p>
       ${diverge(dayItems)}</div>`
+    :a.ln?`<div class="d-sec"><h4>Stunden-Punkte</h4><p class="note">Stunden-Punkte werden ab ${MIN_N} verschiedenen Schülern gezeigt (bisher ${a.lu}).</p></div>`
     :`<div class="d-sec"><h4>Stunden-Punkte</h4><p class="note">Noch keine Stunde bewertet. Unten auf „Stunde“ tippen und der heutigen Stunde −10 bis +10 Punkte geben.</p></div>`;
   let body;
   if(!a.n){
     body=`<div class="empty" style="margin-top:6px"><h3>Noch leer.</h3><p>Sei der Erste und bewerte ${esc(t.name)}.</p></div>${lessonBlock}`;
+  } else if(!a.ok){
+    body=`<div class="empty" style="margin-top:6px"><h3>Noch zu wenig.</h3><p>${a.n} von ${MIN_N} Bewertungen. Ergebnisse zeigt die Seite erst ab ${MIN_N}, damit niemand einzeln erkennbar ist.</p></div>${lessonBlock}`;
   } else {
     body=`<div class="d-score"><div class="grade big">${RING}<b>${fmt(a.overall)}</b><small>von 5</small></div><div class="ds-r">${boxes(a.overall,'lg')}<div class="cnt" style="margin:0">${a.n} Bewertung${a.n===1?'':'en'}</div></div></div>
     ${(bd.length||a.recPct!=null)?`<div class="badges-row">${a.recPct!=null?`<span class="stamp s1">${Math.round(a.recPct)} % empfehlen (${a.recN})</span>`:''}${bd.map((b,k)=>`<span class="stamp s${k%3===1?2:k%3}">${esc(b)}</span>`).join('')}</div>`:''}
@@ -792,7 +843,20 @@ function requestHTML(){
   <p class="sub">Diese Seite ist nur für unsere Klasse. Gib deinen Namen oder dein Kürzel ein (z. B. „LM“) und schick die Anfrage ab. Sobald der BOSS dich zulässt, kannst du loslegen. <b>Der Name lässt sich danach nicht mehr ändern.</b>${S.boss?'':' Der Name „BOSS“ ist für den Verwalter reserviert: Wer ihn zuerst nimmt, wird BOSS.'}</p>
   ${NAME_MSG?`<p class="sub" style="color:var(--red);font-weight:700">${esc(NAME_MSG)}</p>`:''}
   <input id="nameIn" class="inp" maxlength="20" placeholder="Name oder Kürzel" value="${esc(UNAME)}" autocomplete="off">
-  <div class="actions"><button class="btn ghost" data-act="close">Später</button><button class="btn primary" data-act="save-name">Anfrage senden</button></div>`;
+  <div class="actions"><button class="btn ghost" data-act="close">Später</button><button class="btn primary" data-act="save-name">Anfrage senden</button></div>
+  <p class="sub" style="margin-top:18px">Du bist der BOSS und hast ein neues Gerät? <button class="lnk" data-act="boss-login-open">BOSS-Code eingeben</button></p>`;
+}
+function bossCodeHTML(){
+  return `${sheetHead('BOSS-Code','close')}
+  <p class="sub">Gib deinen BOSS-Code ein (40 Zeichen, Buchstaben und Ziffern, Striche und Leerzeichen sind egal). Dieses Gerät wird dann BOSS.</p>
+  <textarea id="codeIn" class="inp" rows="3" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-size:14px;letter-spacing:.04em"></textarea>
+  <div class="actions"><button class="btn ghost" data-act="close">Abbrechen</button><button class="btn primary" data-act="boss-login">Als BOSS anmelden</button></div>`;
+}
+function bossKeyHTML(){
+  return `${sheetHead('Neuer BOSS-Code','close')}
+  <p class="sub"><b>Speichere den Code jetzt</b> (z. B. im Passwort-Manager). Er wird nur dieses eine Mal angezeigt. Wer ihn kennt, kann BOSS werden: nicht weitergeben. Alle älteren Codes sind ab jetzt ungültig.</p>
+  <pre class="code" style="white-space:pre-wrap;word-break:break-all;font-size:16px;font-weight:700;user-select:all">${esc(fmtCode(NEWCODE))}</pre>
+  <div class="actions"><button class="btn ghost" data-act="close">Fertig</button><button class="btn primary" data-act="copy-bosskey">Code kopieren</button></div>`;
 }
 function nameHTML(){
   if(S.cloud) return requestHTML();
@@ -810,10 +874,19 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function bossPath() { return /databases/$(database)/documents/meta/boss; }
     function memberPath(uid) { return /databases/$(database)/documents/members/$(uid); }
-    function isBoss() {
+    function devicePath(uid) { return /databases/$(database)/documents/bossDevices/$(uid); }
+    function codePath(code) { return /databases/$(database)/documents/bossCodes/$(code); }
+    // BOSS = Ersteller des BOSS-Dokuments ...
+    function isOwnerBoss() {
       return signedIn() && exists(bossPath())
              && get(bossPath()).data.uid == request.auth.uid;
     }
+    // ... oder ein Gerät, das einen noch gültigen BOSS-Code eingelöst hat
+    function isCodeBoss() {
+      return signedIn() && exists(devicePath(request.auth.uid))
+             && exists(codePath(get(devicePath(request.auth.uid)).data.code));
+    }
+    function isBoss() { return isOwnerBoss() || isCodeBoss(); }
     function isApproved() {
       return signedIn() && exists(memberPath(request.auth.uid))
              && get(memberPath(request.auth.uid)).data.status == 'approved';
@@ -832,6 +905,31 @@ service cloud.firestore {
                     && request.resource.data.uid == request.auth.uid
                     && request.resource.data.keys().hasOnly(['uid','name','createdAt']);
       allow update, delete: if false;
+    }
+
+    // BOSS-Codes: Der Code ist die Dokument-ID. Nur wer ihn kennt, kann ihn abrufen.
+    // Auflisten und Anlegen darf nur der BOSS, ändern niemand.
+    match /bossCodes/{code} {
+      allow get: if signedIn();
+      allow list: if isBoss();
+      allow create: if isBoss()
+                    && code.matches('^[A-Z2-7]{40}$')
+                    && request.resource.data.keys().hasOnly(['createdAt','createdBy']);
+      allow update: if false;
+      allow delete: if isBoss();
+    }
+
+    // Geräte, die sich mit einem BOSS-Code angemeldet haben (nur das eigene Dokument ist lesbar)
+    match /bossDevices/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create, update: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.uid == uid
+                    && request.resource.data.code is string
+                    && request.resource.data.code.matches('^[A-Z2-7]{40}$')
+                    && exists(codePath(request.resource.data.code))
+                    && request.resource.data.keys().hasOnly(['uid','code','createdAt']);
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // Zugangsanfragen: jeder darf eine eigene stellen, nur der BOSS entscheidet
@@ -1024,7 +1122,7 @@ function settingsHTML(){
     <li><b>Als Erstes selbst die Seite öffnen und dich „BOSS“ nennen</b>, bevor du den Link teilst.</li>
   </ol></details>
   <details><summary>Firestore-Regeln (BOSS-Sperre und Freigabe)</summary><pre class="code">${esc(RULES)}</pre><button class="btn sm" data-act="copy-rules">Regeln kopieren</button></details>
-  <details><summary>BOSS zurücksetzen oder übertragen</summary><p>Der BOSS-Status hängt an der anonymen Anmeldung deines Browsers. Wenn du die Browserdaten löschst oder das Gerät wechselst, bist du nicht mehr BOSS. Zurücksetzen: in der Firebase-Konsole unter <b>Firestore → Daten → Sammlung „meta“</b> das Dokument <b>„boss“</b> löschen. Danach kann sich wieder jemand „BOSS“ nennen.</p></details>`;
+  <details><summary>BOSS zurücksetzen oder übertragen</summary><p>Der BOSS-Status hängt an der anonymen Anmeldung deines Browsers. Wenn du die Browserdaten löschst oder das Gerät wechselst, bist du nicht mehr BOSS. Vorsorge: unter „Ich“ einen <b>BOSS-Code</b> erzeugen und sicher aufbewahren. Mit ihm meldest du dich auf einem neuen Gerät wieder als BOSS an. Ohne Code, zurücksetzen: in der Firebase-Konsole unter <b>Firestore → Daten → Sammlung „meta“</b> das Dokument <b>„boss“</b> löschen. Danach kann sich wieder jemand „BOSS“ nennen.</p></details>`;
 }
 
 function openSheet(type,id){
@@ -1046,6 +1144,8 @@ function renderSheet(first,still){
     case 'settings': inner=settingsHTML(); break;
     case 'name': inner=nameHTML(); break;
     case 'legal': inner=legalHTML(SHEET.id); break;
+    case 'bosscode': inner=bossCodeHTML(); break;
+    case 'bosskey': inner=bossKeyHTML(); break;
   }
   const html=`<div class="si ${still?'still':''}">${inner}</div>`;
   if(first||!$('.sheet',root)){
@@ -1058,6 +1158,7 @@ function renderSheet(first,still){
   if(SHEET.type==='name'&&first) setTimeout(()=>$('#nameIn')?.focus(),350);
 }
 function closeSheet(){
+  NEWCODE='';
   SHEET=null; $('#sheet-root').innerHTML=''; document.body.classList.remove('lock');
 }
 
@@ -1070,7 +1171,8 @@ function updateMode(){
 function renderBanner(){
   const b=$('#banner');
   const pn=pendingCount();
-  const meTab=$('#tabbar [data-tab="me"]'); if(meTab) meTab.innerHTML=`<i>4</i>Ich${pn?` (${pn})`:''}`;
+  const meTab=$('#tabbar [data-tab="me"]'); if(meTab){ meTab.innerHTML=`<i>4</i>Ich${pn?`<span class="bdg" aria-label="${pn} offene Anfrage${pn===1?'':'n'}">${pn}</span>`:''}`; }
+  document.title=pn?`(${pn}) Lehrer-Check`:'Lehrer-Check';
   if(S.mode==='error'){ b.hidden=false; b.className='banner err'; b.innerHTML=`${esc(S.err||'Verbindungsproblem')} <button class="lnk" data-act="settings">Einstellungen</button>`; }
   else if(!S.cloud){ b.hidden=false; b.className='banner'; b.innerHTML='Lokaler Modus: Bewertungen bleiben nur auf diesem Gerät. <button class="lnk" data-act="settings">Mit der Klasse verbinden</button>'; }
   else if(S.ready&&!S.boss){ b.hidden=false; b.className='banner'; b.innerHTML='Noch kein BOSS. Wer sich als Erster „BOSS“ nennt, wird BOSS.'; }
@@ -1079,9 +1181,10 @@ function renderBanner(){
 }
 function gateHTML(){
   const me=S.me;
-  if(!me) return `${title('Zugang')}<p class="lede">Diese Seite ist nur für unsere Klasse. Schick eine Anfrage an den BOSS.</p><div class="row2" style="margin-top:16px"><button class="btn primary" data-act="open-request">Zugang anfragen</button></div>`;
-  if(me.status==='pending') return `${title('Warte auf','Freigabe.')}<p class="lede">Deine Anfrage als „${esc(me.name)}“ liegt beim BOSS. Sobald er dich zulässt, öffnet sich die Seite von selbst.</p><div class="row2" style="margin-top:16px"><button class="btn" data-act="withdraw">Anfrage zurückziehen</button></div>`;
-  return `${title('Kein','Zugang.')}<p class="lede">Der BOSS hat deine Anfrage abgelehnt oder den Zugang entzogen. Sprich ihn direkt an, wenn das ein Fehler ist.</p>`;
+  const bossLnk='<p class="sub" style="margin-top:22px">Du bist der BOSS? <button class="lnk" data-act="boss-login-open">BOSS-Code eingeben</button></p>';
+  if(!me) return `${title('Zugang')}<p class="lede">Diese Seite ist nur für unsere Klasse. Schick eine Anfrage an den BOSS.</p><div class="row2" style="margin-top:16px"><button class="btn primary" data-act="open-request">Zugang anfragen</button></div>${bossLnk}`;
+  if(me.status==='pending') return `${title('Warte auf','Freigabe.')}<p class="lede">Deine Anfrage als „${esc(me.name)}“ liegt beim BOSS. Sobald er dich zulässt, öffnet sich die Seite von selbst.</p><div class="row2" style="margin-top:16px"><button class="btn" data-act="withdraw">Anfrage zurückziehen</button></div>${bossLnk}`;
+  return `${title('Kein','Zugang.')}<p class="lede">Der BOSS hat deine Anfrage abgelehnt oder den Zugang entzogen. Sprich ihn direkt an, wenn das ein Fehler ist.</p>${bossLnk}`;
 }
 function maybeOpenRequest(){
   if(S.cloud&&S.ready&&S.mode!=='error'&&!hasAccess()&&!S.me&&!S.askedName&&!SHEET){ S.askedName=true; openSheet('name'); }
@@ -1113,7 +1216,7 @@ const H={
   tab(el){ S.tab=el.dataset.tab; renderMain(true); $('#scroller').scrollTo({top:0,behavior:'smooth'}); },
   open(el){ openSheet('detail',el.dataset.id); },
   close(){ closeSheet(); },
-  backdrop(el,e){ if(e.target!==el) return; if(nameLocked()) return; closeSheet(); },
+  backdrop(el,e){ if(e.target!==el) return; if(nameLocked()||SHEET?.type==='bosskey') return; closeSheet(); },
   settings(){ openSheet('settings'); },
   legal(el){ openSheet('legal',el.dataset.doc); },
   subj(el){ S.subj=el.dataset.s; renderChips(); renderList(true); },
@@ -1251,6 +1354,28 @@ const H={
       else { await api.requestAccess(v); UNAME=v; ls.set('lc_name',v); closeSheet(); toast('Anfrage gesendet'); }
     }catch(err){ if(el) el.disabled=false; toast('Das hat nicht geklappt: '+errMsg(err)); }
   },
+  'boss-login-open'(){ openSheet('bosscode'); },
+  async 'boss-login'(el){
+    if(!S.cloud||!fb||!S.authed||S.mode==='error') return toast('Verbindung wird aufgebaut. Gleich noch mal versuchen.');
+    const code=normCode($('#codeIn')?.value);
+    if(!CODE_RE.test(code)) return toast('Der Code hat 40 Zeichen (Buchstaben A–Z, Ziffern 2–7).');
+    el.disabled=true;
+    try{
+      await withTimeout(fb.setDoc(fb.doc(fb.db,'bossDevices',UID),{uid:UID,code,createdAt:Date.now()}));
+      closeSheet(); toast('Du bist jetzt BOSS');
+    }catch(err){
+      el.disabled=false;
+      toast(String(err?.code||err?.message||'').includes('permission')?'Code falsch oder nicht mehr gültig':'Das hat nicht geklappt: '+errMsg(err));
+    }
+  },
+  async 'boss-newkey'(el){
+    if(!isBoss()) return;
+    if(!confirm('Neuen BOSS-Code erzeugen? Alle bisherigen Codes werden ungültig. Geräte, die damit angemeldet sind, verlieren den BOSS-Status.')) return;
+    el.disabled=true;
+    try{ NEWCODE=await rotateBossCode(); openSheet('bosskey'); }
+    catch(err){ el.disabled=false; toast('Das hat nicht geklappt: '+errMsg(err)+(String(err?.code||'').includes('permission')?' (Firestore-Regeln schon aktualisiert?)':'')); }
+  },
+  async 'copy-bosskey'(){ try{ await navigator.clipboard.writeText(fmtCode(NEWCODE)); toast('Code kopiert'); }catch{ toast('Kopieren nicht möglich. Bitte manuell markieren.'); } },
   async withdraw(){
     if(!confirm('Anfrage zurückziehen?')) return;
     try{ await api.withdrawAccess(); S.askedName=false; toast('Anfrage zurückgezogen'); }
@@ -1278,7 +1403,7 @@ const H={
   export(){
     const rows=[['Lehrer','Fach',...CRIT.map(c=>c.name),'Gesamt','Tags','Weiterempfehlung',...(isBoss()?['Von']:[]),'Datum']];
     S.ratings.forEach(r=>{
-      const a=S.A.get(r.teacherId); if(!a) return;
+      const a=S.A.get(r.teacherId); if(!a||!a.ok) return;
       rows.push([a.t.name,r.subject||'',...CRIT.map(c=>r[c.key]??''),fmt(ovr(r),2),(r.tags||[]).map(tagLabel).join(' | '),typeof r.rec==='boolean'?(r.rec?'ja':'nein'):'',...(isBoss()?[r.userName||'']:[]),new Date(ts(r)).toISOString().slice(0,10)]);
     });
     if(rows.length<2) return toast('Noch keine Bewertungen zum Exportieren');
@@ -1286,7 +1411,7 @@ const H={
   },
   'export-lessons'(){
     const rows=[['Lehrer','Datum','Punkte',...(isBoss()?['Von']:[])]];
-    S.lessons.forEach(l=>{ const a=S.A.get(l.teacherId); if(!a) return; rows.push([a.t.name,l.day,l.points,...(isBoss()?[l.userName||'']:[])]); });
+    S.lessons.forEach(l=>{ const a=S.A.get(l.teacherId); if(!a||!a.lok) return; rows.push([a.t.name,l.day,l.points,...(isBoss()?[l.userName||'']:[])]); });
     if(rows.length<2) return toast('Noch keine Stunden zum Exportieren');
     download('lehrer-stunden.csv',rows);
   },
@@ -1297,6 +1422,7 @@ const H={
       else { await navigator.clipboard.writeText(url); toast('Link kopiert'); }
     }catch{}
   },
+  theme(){ ls.set('lc_theme',isDark()?'light':'dark'); applyTheme(); renderMain(false); },
   'demo-load'(){ loadDemo(); toast('Demo-Daten geladen'); },
   'demo-clear'(){ clearDemo(); toast('Demo-Daten entfernt'); }
 };
@@ -1321,13 +1447,14 @@ document.addEventListener('change',e=>{
   else if(t.id==='subjectSel'&&FORM){ FORM.subject=t.value; }
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&SHEET&&!nameLocked()){ closeSheet(); return; }
+  if(e.key==='Escape'&&SHEET&&!nameLocked()&&SHEET.type!=='bosskey'){ closeSheet(); return; }
   if(e.key==='Enter'&&e.target.id==='nameIn'){ e.preventDefault(); H['save-name'](null); }
   if(e.target.id==='tSubj'&&(e.key==='Enter'||e.key===',')){ e.preventDefault(); H['subj-add'](); }
 });
 
 /* ---------- Start ---------- */
 (function init(){
+  applyTheme();
   const cfg=getCfg();
   S.cloud=!!cfg; S.mode=cfg?'cloud':'local';
   computeAll(); updateMode(); renderBanner(); renderMain(true);

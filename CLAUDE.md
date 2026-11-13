@@ -5,7 +5,7 @@ Dieses Dokument ersetzt den bisherigen Chat. Zusätzlich zum Code gilt alles hie
 ## 1. Worum es geht
 
 - **Max** (Maximilian Zeren, Schüler, Deutschland) hat die Webseite „Lehrer-Check“ für seine Klasse gebaut. Die Klasse bewertet ihre Lehrer anonym-sachlich mit Sternen. Die Seite ist **nur für Klassenmitglieder** gedacht.
-- **Drei Dateien:** `index.html` (Grundgerüst), `style.css` (CSS) und `app.js` (JavaScript als ES-Modul, ca. 1340 Zeilen, LF-Zeilenenden). Lokal per Doppelklick geht es nicht (Module brauchen einen Server, z. B. `python -m http.server`). Kein Build, kein npm, keine Abhängigkeiten außer den Firebase-SDK-Imports von `gstatic.com` (Version `10.12.2`, Konstante `FB_VERSION`).
+- **Drei Dateien:** `index.html` (Grundgerüst), `style.css` (CSS) und `app.js` (JavaScript als ES-Modul, ca. 1340 Zeilen, LF-Zeilenenden). Lokal per Doppelklick geht es nicht (Module brauchen einen Server, z. B. ein kleiner Node-Server (Python ist auf Maxs PC nicht installiert)). Kein Build, kein npm, keine Abhängigkeiten außer den Firebase-SDK-Imports von `gstatic.com` (Version `10.12.2`, Konstante `FB_VERSION`).
 - **Sprache der Oberfläche: Deutsch.** Kommentare im Code ebenfalls Deutsch. Halte diesen Stil bei.
 
 ## 2. Hosting und Infrastruktur
@@ -27,6 +27,8 @@ Dieses Dokument ersetzt den bisherigen Chat. Zusätzlich zum Code gilt alles hie
 ## 4. Datenmodell (Firestore)
 
 - `meta/boss`: siehe oben.
+- `bossCodes/{code}`: BOSS-Code (40 Zeichen A–Z/2–7), der Code ist die Dokument-ID. `{createdAt,createdBy}`. `get` darf jeder Angemeldete (nur wer den Code kennt), `list`/`create`/`delete` nur der BOSS.
+- `bossDevices/{uid}`: `{uid,code,createdAt}`. Ein Gerät, das einen BOSS-Code eingelöst hat. Es ist BOSS, solange `bossCodes/{code}` existiert (Regel `isCodeBoss`). Nur das eigene Dokument ist lesbar.
 - `members/{uid}`: siehe oben.
 - `teachers/{id}`: `{name, subjects[], createdAt, createdBy}`. Name = nur Anrede und Nachname („Frau Müller“). Das ist so gewollt (Datenschutz). Keine Vornamen, keine privaten Infos.
 - `ratings/{teacherId_uid}` (eine Bewertung pro Person und Lehrer, Dokument-ID ist Pflicht): `{teacherId,userId,userName,f,h,b,u,a,p,g,tags[≤4],rec(null|bool),subject,createdAt,updatedAt}`. **Es gibt keine Kommentare mehr** (bewusst entfernt, auch aus UI und CSV). Alte Kommentare liegen evtl. noch in der Datenbank, werden aber nicht angezeigt. Neue Schreibvorgänge mit Feld `comment` scheitern an `keys().hasOnly`.
@@ -37,6 +39,7 @@ Dieses Dokument ersetzt den bisherigen Chat. Zusätzlich zum Code gilt alles hie
 
 - **7 Kriterien** (Konstante `CRIT`, Sterne 1–5): `f` Freundlichkeit, `h` Hilfsbereitschaft, `b` Beibringungskraft, `u` Unterrichtsgestaltung, `a` Anpassung an die Klasse, `p` Prüfungen & Benotung, `g` Gerechtigkeit.
 - **Stichwörter (Tags)**, maximal 4 (`TAGS`): humor, streng, chaos, anschaulich, hausi, locker, schlaf, puenktlich, zeit, fordernd, buch, laut. Die IDs stehen auch in den Regeln.
+- **Mindestanzahl (`MIN_N = 3`):** Durchschnitte, Noten, Weiterempfehlung, Tags, Fächer-Auswertung und CSV erscheinen erst ab 3 Bewertungen pro Lehrer (Stunden-Punkte ab 3 verschiedenen Schülern). Das ist nur eine Anzeigesperre in der UI, die Rohdaten sind für Mitglieder weiter lesbar. Gesteuert über `a.ok`/`a.lok` in `computeAll`.
 - **Weiterempfehlung** (`rec`, ja/nein/leer) und optional das Fach.
 - **Stunden-Punkte:** −10 bis +10, **1× pro Tag und Lehrer**, Gewicht in der Gesamtnote **10 %** (`LESSON_W = 0.10`). Die Gesamtnote ist also zu 90 % der Sterne-Schnitt und zu 10 % die umgerechnete Stunden-Stimmung.
 - Weitere Funktionen: Statistik (Auswertung), Vergleich von Lehrern (Radar, Balken), Fächerfilter, Sortierung, Suche, CSV-Export (Bewertungen und Stunden), Demo-Daten im lokalen Modus.
@@ -47,7 +50,7 @@ Dieses Dokument ersetzt den bisherigen Chat. Zusätzlich zum Code gilt alles hie
 - Cloud: `startCloud` (anonymer Login, `meta/boss` und `members/{UID}` abonnieren), `syncAccess`, `startData`, `stopData`, `recomputeReady`, `claimBoss`, `startLocal`. `api = {requestAccess, withdrawAccess, setMember, deleteMember, addTeacher, updateTeacher, deleteTeacher, saveRating, deleteRating, saveLesson, deleteLesson}`.
 - Rendering: `renderMain`, `refreshMain`, `onData`, `renderBanner`, `gateHTML` (Wartescreen ohne Zugang), `viewMe`, `memberSection`, `detailHTML`, `rateHTML`, `lessonHTML`, `teacherFormHTML`, `settingsHTML`, `nameHTML`/`requestHTML`, `legalHTML`. Fenster („Sheets“): `openSheet(type,id)`, `renderSheet`, `closeSheet` (Typen: detail, rate, lesson, teacher, settings, name, legal).
 - Events: **ein** Handler-Objekt `H` mit Aktionen über `data-act="…"` (Event-Delegation). Neue Buttons bekommen `data-act` und einen Eintrag in `H`.
-- Lokale Speicherung im Browser (immer in try/catch über `ls`): `lc_uid`, `lc_name`, `lc_local_v1`, `lc_fbcfg`.
+- Lokale Speicherung im Browser (immer in try/catch über `ls`): `lc_uid`, `lc_name`, `lc_local_v1`, `lc_fbcfg`, `lc_theme` (`dark`; Dunkelmodus nur per Schalter unter „Ich“, folgt bewusst nicht dem Gerät; Farben als CSS-Variablen in `style.css`, `html[data-theme=dark]`).
 
 ## 7. Design: Schulheft-Look, bewusst nicht „KI-haft“
 
