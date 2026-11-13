@@ -32,9 +32,10 @@ Dieses Dokument ersetzt den bisherigen Chat. Zusätzlich zum Code gilt alles hie
 - `bossDevices/{uid}`: `{uid,code,createdAt}`. Ein Gerät, das einen BOSS-Code eingelöst hat. Es ist BOSS, solange `bossCodes/{code}` existiert (Regel `isCodeBoss`). Nur das eigene Dokument ist lesbar.
 - `members/{uid}`: siehe oben.
 - `teachers/{id}`: `{name, subjects[], createdAt, createdBy}`. Name = nur Anrede und Nachname („Frau Müller“). Das ist so gewollt (Datenschutz). Keine Vornamen, keine privaten Infos.
-- `ratings/{teacherId_uid}` (eine Bewertung pro Person und Lehrer, Dokument-ID ist Pflicht): `{teacherId,userId,userName,f,h,b,u,a,p,g,tags[≤4],rec(null|bool),subject,createdAt,updatedAt}`. **Es gibt keine Kommentare mehr** (bewusst entfernt, auch aus UI und CSV). Alte Kommentare liegen evtl. noch in der Datenbank, werden aber nicht angezeigt. Neue Schreibvorgänge mit Feld `comment` scheitern an `keys().hasOnly`.
-- `lessons/{teacherId_uid_YYYY-MM-DD}`: `{teacherId,userId,userName,points(-10..10),day,createdAt,updatedAt}`. Höchstens ein Eintrag pro Tag, Lehrer und Person.
-- `userName` in Ratings/Lessons muss dem Namen aus `members` bzw. „BOSS“ entsprechen (Regel `nameOk`). Er wird in der UI nirgends mehr angezeigt. Im CSV-Export erscheint die Spalte „Von“ **nur für den BOSS**.
+- `ratings/{teacherId_uid}` (eine Bewertung pro Person und Lehrer, Dokument-ID ist Pflicht): `{teacherId,userId,f,h,b,u,a,p,g,tags[≤4],rec(null|bool),subject,createdAt,updatedAt}` (kein Name im Dokument). **Es gibt keine Kommentare mehr** (bewusst entfernt, auch aus UI und CSV). Alte Kommentare liegen evtl. noch in der Datenbank, werden aber nicht angezeigt. Neue Schreibvorgänge mit Feld `comment` scheitern an `keys().hasOnly`.
+- `lessons/{teacherId_uid_YYYY-MM-DD}`: `{teacherId,userId,points(-10..10),day,createdAt,updatedAt}`. `day` ist das **UTC-Datum von heute** (`dayKey()`), die Regeln erzwingen das (`today()`). Dadurch höchstens ein Eintrag pro Tag, Lehrer und Person.
+- **Anonymität:** Bewertungen und Stunden enthalten keinen Namen (`userName` wurde entfernt, Mitglieder sehen nur die anonyme `userId`). Nur der BOSS kann über `members` zuordnen. Die CSV-Spalte „Von“ gibt es **nur für den BOSS** (`whoMap`). Alte Dokumente mit `userName` bereinigt der BOSS-Browser automatisch einmalig (`stripOldNames`, Regel `onlyStripsName`).
+- **Regeln gegen Missbrauch:** Bewertungen und Stunden nur für existierende Lehrer (`exists(teacherPath)`), `createdAt`/`updatedAt` müssen Zahlen und plausibel sein (`pastOk`/`nowOk`). CSV-Zellen werden gegen Formel-Injection geschützt (`csvCell`).
 
 ## 5. Bewertungslogik
 

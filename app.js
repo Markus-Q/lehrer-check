@@ -63,7 +63,8 @@ const ovr = r=>mean(critVals(r))??0;
 const ts = r=>r.updatedAt||r.createdAt||0;
 const fmtDate = t=>new Date(t).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
 const fmtDay = d=>`${d.slice(8)}.${d.slice(5,7)}.${d.slice(2,4)}`;
-const dayKey = (d=new Date())=>{ const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
+// Tag als UTC-Datum: die Firestore-Regeln lassen nur den heutigen UTC-Tag zu (1 Stunden-Eintrag pro Tag und Lehrer)
+const dayKey = (d=new Date())=>d.toISOString().slice(0,10);
 const rid = ()=>'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const byName = (x,y)=>x.t.name.localeCompare(y.t.name,'de');
 const tagLabel = id=>TAGS.find(t=>t.id===id)?.label||id;
@@ -384,6 +385,27 @@ async function rotateBossCode(){
   return code;
 }
 
+/* Einmalige Bereinigung: Alte Bewertungen und Stunden enthalten noch das Feld userName (Klarname). Der BOSS entfernt es,
+   damit Mitglieder nicht mehr sehen können, wer was bewertet hat. Läuft höchstens einmal pro Seitenaufruf, still im Hintergrund. */
+let stripTried=false;
+async function stripOldNames(){
+  if(stripTried||!fb||!S.cloud||!S.ready||S.mode==='error'||!isBoss()) return;
+  const refs=[
+    ...S.ratings.filter(r=>'userName' in r).map(r=>fb.doc(fb.db,'ratings',r.id)),
+    ...S.lessons.filter(l=>'userName' in l).map(l=>fb.doc(fb.db,'lessons',l.id))
+  ];
+  if(!refs.length) return;
+  stripTried=true;
+  try{
+    for(let i=0;i<refs.length;i+=400){
+      const b=fb.writeBatch(fb.db);
+      refs.slice(i,i+400).forEach(r=>b.update(r,{userName:fb.deleteField()}));
+      await withTimeout(b.commit(),20000);
+    }
+    toast('Alte Namen aus Bewertungen entfernt');
+  }catch{ /* z. B. Regeln noch nicht aktualisiert: beim nächsten Aufruf wieder */ }
+}
+
 /* ---------- API ---------- */
 const needFb=()=>{ if(!fb) throw new Error('Keine Verbindung zu Firebase'); };
 const api={
@@ -424,7 +446,7 @@ const api={
   },
   async saveRating(tid,d){
     const id=tid+'_'+UID, prev=S.ratings.find(r=>r.id===id), now=Date.now();
-    const r={teacherId:tid,userId:UID,userName:UNAME,tags:d.tags||[],rec:(typeof d.rec==='boolean')?d.rec:null,subject:d.subject||'',createdAt:prev?.createdAt||now,updatedAt:now};
+    const r={teacherId:tid,userId:UID,tags:d.tags||[],rec:(typeof d.rec==='boolean')?d.rec:null,subject:d.subject||'',createdAt:prev?.createdAt||now,updatedAt:now};
     CRIT.forEach(c=>{ r[c.key]=d[c.key]; });
     if(S.cloud){ needFb(); await withTimeout(fb.setDoc(fb.doc(fb.db,'ratings',id),r)); return; }
     const i=S.ratings.findIndex(x=>x.id===id); const row={id,...r};
@@ -437,7 +459,7 @@ const api={
   },
   async saveLesson(tid,points){
     const day=dayKey(), id=`${tid}_${UID}_${day}`, prev=S.lessons.find(l=>l.id===id), now=Date.now();
-    const l={teacherId:tid,userId:UID,userName:UNAME,points:clamp(Math.round(points),-10,10),day,createdAt:prev?.createdAt||now,updatedAt:now};
+    const l={teacherId:tid,userId:UID,points:clamp(Math.round(points),-10,10),day,createdAt:prev?.createdAt||now,updatedAt:now};
     if(S.cloud){ needFb(); await withTimeout(fb.setDoc(fb.doc(fb.db,'lessons',id),l)); return; }
     const i=S.lessons.findIndex(x=>x.id===id); const row={id,...l};
     if(i>=0) S.lessons[i]=row; else S.lessons.push(row);
@@ -472,7 +494,7 @@ function loadDemo(){
     const pool=[...names].sort(()=>rnd()-.5).slice(0,cnt);
     pool.forEach(u=>{
       const val=p=>clamp(Math.round(p+(rnd()-.5)*def.v),1,5);
-      const r={id:id+'_demo-'+u,teacherId:id,userId:'demo-'+u,userName:u,demo:true};
+      const r={id:id+'_demo-'+u,teacherId:id,userId:'demo-'+u,demo:true};
       CRIT.forEach((c,i)=>{ r[c.key]=val(def.p[i]); });
       const o=ovr(r);
       r.subject=(def.s.length>1&&rnd()>.4)?def.s[Math.floor(rnd()*def.s.length)]:'';
@@ -485,7 +507,7 @@ function loadDemo(){
         const off=Math.floor(rnd()*28); if(used.has(off)) continue; used.add(off);
         const dt=new Date(now-off*day), dk=dayKey(dt);
         const pts=clamp(Math.round(mood+(rnd()-.5)*(def.v*3.2)),-10,10);
-        S.lessons.push({id:`${id}_demo-${u}_${dk}`,teacherId:id,userId:'demo-'+u,userName:u,points:pts,day:dk,createdAt:dt.getTime(),updatedAt:dt.getTime(),demo:true});
+        S.lessons.push({id:`${id}_demo-${u}_${dk}`,teacherId:id,userId:'demo-'+u,points:pts,day:dk,createdAt:dt.getTime(),updatedAt:dt.getTime(),demo:true});
       }
     });
   });
@@ -772,7 +794,7 @@ function rateHTML(tid){
   const t=a.t, F=FORM, mine=myRating(tid);
   const subs=t.subjects||[];
   return `${sheetHead(`${esc(t.name)} bewerten`,'rate-cancel')}
-  <p class="sub">Tippe pro Aufgabe auf das Kästchen. Deine Bewertung wird mit deinem Namen („${esc(UNAME)}“) gespeichert.</p>
+  <p class="sub">Tippe pro Aufgabe auf das Kästchen. Deine Bewertung ist für die Klasse anonym. Nur der BOSS kann sie dir zuordnen.</p>
   ${CRIT.map(c=>`<div class="rate-row">
     <div class="rr-head"><b><span class="no">${c.no}</span>${esc(c.name)}</b><span class="rr-txt" id="rt-${c.key}">${LABELS[F[c.key]]||'offen'}</span></div>
     <p class="hint">${esc(c.hint)}</p>
@@ -892,11 +914,18 @@ service cloud.firestore {
              && get(memberPath(request.auth.uid)).data.status == 'approved';
     }
     function isMember() { return isBoss() || isApproved(); }
-    function myName() {
-      return isBoss() ? 'BOSS' : get(memberPath(request.auth.uid)).data.name;
-    }
-    function nameOk(d) { return d.userName is string && d.userName == myName(); }
+    function teacherPath(id) { return /databases/$(database)/documents/teachers/$(id); }
     function stars(v) { return v is number && v >= 1 && v <= 5; }
+    // Zeitstempel (Millisekunden): eine Zahl, nicht in der Zukunft; "jetzt" höchstens 2 Tage neben der Serverzeit
+    function pastOk(v) { return v is number && v > 0 && v <= request.time.toMillis() + 172800000; }
+    function nowOk(v) { return pastOk(v) && v >= request.time.toMillis() - 172800000; }
+    // Heutiger Tag (UTC) als YYYY-MM-DD: pro Person und Lehrer nur 1 Stunden-Eintrag pro Tag möglich
+    function pad(n) { return n < 10 ? '0' + string(n) : string(n); }
+    function today() { return string(request.time.year()) + '-' + pad(request.time.month()) + '-' + pad(request.time.day()); }
+    // Der BOSS darf an fremden Bewertungen nur das alte Feld userName entfernen
+    function onlyStripsName() {
+      return isBoss() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userName']);
+    }
 
     // Wer zuerst "BOSS" claimt, bleibt BOSS (nur einmal anlegbar)
     match /meta/boss {
@@ -943,6 +972,7 @@ service cloud.firestore {
                     && request.resource.data.name.size() >= 2
                     && request.resource.data.name.size() <= 20
                     && request.resource.data.name.lower() != 'boss'
+                    && request.resource.data.createdAt is number
                     && request.resource.data.keys().hasOnly(['uid','name','status','createdAt']);
       allow update: if isBoss();
       allow delete: if isBoss()
@@ -961,13 +991,18 @@ service cloud.firestore {
       allow delete: if isBoss();
     }
 
-    // Bewertungen: nur zugelassene Konten, jeder nur seine eigene
+    // Bewertungen: nur zugelassene Konten, jeder nur seine eigene, nur für existierende Lehrer.
+    // Kein Name im Dokument: Mitglieder sehen nicht, wer was bewertet hat (nur der BOSS kann es über die Nutzer-ID zuordnen).
     match /ratings/{id} {
       allow read: if isMember();
       allow create, update: if isMember()
                     && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.teacherId is string
+                    && request.resource.data.teacherId.size() <= 40
+                    && exists(teacherPath(request.resource.data.teacherId))
                     && id == request.resource.data.teacherId + '_' + request.auth.uid
-                    && nameOk(request.resource.data)
+                    && pastOk(request.resource.data.createdAt)
+                    && nowOk(request.resource.data.updatedAt)
                     && stars(request.resource.data.f) && stars(request.resource.data.h)
                     && stars(request.resource.data.b) && stars(request.resource.data.u)
                     && stars(request.resource.data.a) && stars(request.resource.data.p)
@@ -978,22 +1013,28 @@ service cloud.firestore {
                     && (request.resource.data.rec == null || request.resource.data.rec is bool)
                     && request.resource.data.subject is string
                     && request.resource.data.subject.size() <= 30
-                    && request.resource.data.keys().hasOnly(['teacherId','userId','userName','tags','rec','subject','createdAt','updatedAt','f','h','b','u','a','p','g']);
+                    && request.resource.data.keys().hasOnly(['teacherId','userId','tags','rec','subject','createdAt','updatedAt','f','h','b','u','a','p','g']);
+      allow update: if onlyStripsName();
       allow delete: if isMember() && (resource.data.userId == request.auth.uid || isBoss());
     }
 
-    // Stunden-Punkte: 1 Dokument pro Tag, Lehrer und Person
+    // Stunden-Punkte: 1 Dokument pro Tag, Lehrer und Person. Der Tag muss der heutige (UTC) sein.
     match /lessons/{id} {
       allow read: if isMember();
       allow create, update: if isMember()
                     && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.teacherId is string
+                    && request.resource.data.teacherId.size() <= 40
+                    && exists(teacherPath(request.resource.data.teacherId))
                     && request.resource.data.day is string
-                    && request.resource.data.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                    && request.resource.data.day == today()
                     && id == request.resource.data.teacherId + '_' + request.auth.uid + '_' + request.resource.data.day
                     && request.resource.data.points is number
                     && request.resource.data.points >= -10 && request.resource.data.points <= 10
-                    && nameOk(request.resource.data)
-                    && request.resource.data.keys().hasOnly(['teacherId','userId','userName','points','day','createdAt','updatedAt']);
+                    && pastOk(request.resource.data.createdAt)
+                    && nowOk(request.resource.data.updatedAt)
+                    && request.resource.data.keys().hasOnly(['teacherId','userId','points','day','createdAt','updatedAt']);
+      allow update: if onlyStripsName();
       allow delete: if isMember() && (resource.data.userId == request.auth.uid || isBoss());
     }
   }
@@ -1013,7 +1054,7 @@ function legalHTML(doc){
   <h3>Verantwortlicher</h3><p>${who}</p>
   <h3>Wer darf die Seite nutzen?</h3><p>Nur Mitglieder unserer Klasse. Jeder muss eine Zugangsanfrage stellen, der BOSS lässt Personen einzeln zu. Ohne Freigabe sind keine Bewertungen sichtbar.</p>
   <h3>Welche Daten werden verarbeitet?</h3>
-  <p><b>Schüler:</b> der gewählte Name oder das Kürzel, eine anonyme Nutzer-ID (Firebase Anonymous Auth), Zeitpunkt der Anfrage und der Zulassung, deine Bewertungen und Stundenpunkte. Echte Namen sind nicht nötig, ein Kürzel reicht.</p>
+  <p><b>Schüler:</b> der gewählte Name oder das Kürzel, eine anonyme Nutzer-ID (Firebase Anonymous Auth), Zeitpunkt der Anfrage und der Zulassung, deine Bewertungen und Stundenpunkte. Echte Namen sind nicht nötig, ein Kürzel reicht. Bewertungen und Stundenpunkte enthalten keinen Namen, nur die anonyme Nutzer-ID. Andere Mitglieder sehen daher nicht, von wem sie stammen. Der BOSS kann sie über die Nutzer-ID und die Mitgliederliste einer Person zuordnen.</p>
   <p><b>Lehrkräfte:</b> Anrede und Nachname (z. B. „Frau Müller“), Fächer und die Bewertungen durch die Klasse (Sterne, Stichworte, Punkte pro Stunde). Es gibt keine Freitext-Kommentare.</p>
   <h3>Zweck und Rechtsgrundlage</h3>
   <p>Die Klasse tauscht sich über den Unterricht aus und gibt anonymisiert-sachliche Rückmeldungen. Rechtsgrundlage ist unser berechtigtes Interesse an dieser Rückmeldung (Art. 6 Abs. 1 lit. f DSGVO) und bei Schülern die Anfrage selbst (Art. 6 Abs. 1 lit. b bzw. a DSGVO).</p>
@@ -1209,6 +1250,7 @@ function onData(){
   computeAll(); updateMode(); renderBanner(); refreshMain();
   if(SHEET&&SHEET.type==='detail'){ if(S.A.has(SHEET.id)) renderSheet(false,true); else closeSheet(); }
   maybeOpenRequest();
+  stripOldNames();
 }
 
 /* ---------- Aktionen ---------- */
@@ -1401,17 +1443,20 @@ const H={
   async 'copy-rules'(){ try{ await navigator.clipboard.writeText(RULES); toast('Regeln kopiert'); }catch{ toast('Kopieren nicht möglich. Bitte manuell markieren.'); } },
 
   export(){
+    const who=whoMap();
     const rows=[['Lehrer','Fach',...CRIT.map(c=>c.name),'Gesamt','Tags','Weiterempfehlung',...(isBoss()?['Von']:[]),'Datum']];
     S.ratings.forEach(r=>{
       const a=S.A.get(r.teacherId); if(!a||!a.ok) return;
-      rows.push([a.t.name,r.subject||'',...CRIT.map(c=>r[c.key]??''),fmt(ovr(r),2),(r.tags||[]).map(tagLabel).join(' | '),typeof r.rec==='boolean'?(r.rec?'ja':'nein'):'',...(isBoss()?[r.userName||'']:[]),new Date(ts(r)).toISOString().slice(0,10)]);
+      const d=new Date(ts(r));
+      rows.push([a.t.name,r.subject||'',...CRIT.map(c=>r[c.key]??''),fmt(ovr(r),2),(r.tags||[]).map(tagLabel).join(' | '),typeof r.rec==='boolean'?(r.rec?'ja':'nein'):'',...(isBoss()?[who(r.userId)]:[]),isNaN(d)?'':d.toISOString().slice(0,10)]);
     });
     if(rows.length<2) return toast('Noch keine Bewertungen zum Exportieren');
     download('lehrer-bewertungen.csv',rows);
   },
   'export-lessons'(){
+    const who=whoMap();
     const rows=[['Lehrer','Datum','Punkte',...(isBoss()?['Von']:[])]];
-    S.lessons.forEach(l=>{ const a=S.A.get(l.teacherId); if(!a||!a.lok) return; rows.push([a.t.name,l.day,l.points,...(isBoss()?[l.userName||'']:[])]); });
+    S.lessons.forEach(l=>{ const a=S.A.get(l.teacherId); if(!a||!a.lok) return; rows.push([a.t.name,l.day,l.points,...(isBoss()?[who(l.userId)]:[])]); });
     if(rows.length<2) return toast('Noch keine Stunden zum Exportieren');
     download('lehrer-stunden.csv',rows);
   },
@@ -1426,8 +1471,19 @@ const H={
   'demo-load'(){ loadDemo(); toast('Demo-Daten geladen'); },
   'demo-clear'(){ clearDemo(); toast('Demo-Daten entfernt'); }
 };
+// Nutzer-ID \u2192 Name, nur f\u00fcr den BOSS (Mitgliederliste). Bewertungen selbst enthalten keinen Namen mehr.
+function whoMap(){
+  const m=new Map(S.members.map(x=>[x.id,x.name]));
+  return uid=>(uid===UID&&isBoss())||(S.boss&&S.boss.uid===uid)?'BOSS':(m.get(uid)||'');
+}
+// CSV-Zelle: Texte, die mit = + - @ beginnen, w\u00fcrde Excel als Formel ausf\u00fchren. Ein vorangestelltes ' verhindert das.
+function csvCell(v){
+  let s=String(v??'');
+  if(typeof v==='string'&&/^[=+\-@\t\r]/.test(s)) s="'"+s;
+  return `"${s.replace(/"/g,'""')}"`;
+}
 function download(name,rows){
-  const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const csv='\ufeff'+rows.map(r=>r.map(csvCell).join(';')).join('\n');
   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),2000);
