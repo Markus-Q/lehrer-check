@@ -334,7 +334,7 @@ details p{font-size:13px;margin-top:10px}
 /* ============================================================
    ZWEI DISPLAY-ARTEN
    1) Smartphone (alles ohne Medienabfrage): eine Spalte, Karten gestapelt, Fenster als Blatt von unten.
-   2) iPad 11" (Hochformat 834 x 1194, Querformat 1194 x 834): breite Zeilen-Karten mit drei Spalten, zweispaltige Auswertung, Fenster mittig.
+   2) iPad 11" (A16, 2360 x 1640 px bei Pixeldichte 2 = 820 x 1180 CSS-px hochkant, 1180 x 820 quer): breite Zeilen-Karten mit drei Spalten, zweispaltige Auswertung, Fenster mittig.
    Handy im Querformat (breit, aber nur ca. 400 hoch) und iPad im Splitview (unter 760 breit) bleiben bewusst im Smartphone-Modus.
    ============================================================ */
 button.chip,.qbtn,.x,.btn.sm{min-height:38px}
