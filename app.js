@@ -12,7 +12,7 @@ const FIREBASE_CONFIG = {
   appId: "1:355339313897:web:5f02ddd2546f7d65bb8678"
 };
 const FB_VERSION = '10.12.2';
-const BUILD = '13.11.2026 19:21';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
+const BUILD = '13.11.2026 19:29';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
 const LESSON_W = 0.10;   // Anteil der Stunden-Punkte an der Gesamtnote (10 %)
 const MIN_N = 3;         // Mindestanzahl Bewertungen (bzw. Schüler bei Stunden), bevor Ergebnisse gezeigt werden
 // Farben als CSS-Variablen, damit sie im Dunkelmodus mitwechseln
@@ -1096,15 +1096,7 @@ function legalHTML(doc){
   const reset=()=>{ stop(); x=0; v=0; draw(); };
   const findSc=t=>{ const n=t&&t.closest?t.closest('.sheet,#scroller'):null; return n; };
   const contentOf=n=>n.id==='scroller'?document.getElementById('app'):n.firstElementChild;
-  const finish=()=>{ const an=anim, tg=sp&&sp.target; anim=null; sp=null; x=0; v=0; pinDir=0; if(an) an.cancel(); if(tg) tg.style.transform=''; releaseRate(); };
-  /* Bildrate halten: Beim Ziehen läuft das Handy mit 120 Hz, nach dem Loslassen fällt Chrome für eine reine Animation auf 60 Hz zurück
-     (gemessen mit ?diag). Das Umschalten verursacht Aussetzer und das Federn wirkt gröber als das Ziehen. Ein echtes (programmatisches) weiches
-     Scrollen zählt für Chrome als Scrollen und hält die hohe Bildrate: Deshalb läuft während der Feder unsichtbar ein winziger Scrollbereich mit. */
-  const keep=document.createElement('div'); keep.setAttribute('aria-hidden','true');
-  keep.style.cssText='position:fixed;left:0;bottom:0;width:3px;height:3px;overflow:auto;opacity:.02;pointer-events:none;z-index:-1';
-  { const k=document.createElement('div'); k.style.cssText='width:1px;height:30000px'; keep.appendChild(k); document.body.appendChild(keep); }
-  const holdRate=()=>{ try{ keep.scrollTop=0; keep.scrollTo({top:3000,behavior:'smooth'}); }catch{} };
-  const releaseRate=()=>{ try{ keep.scrollTo({top:0,behavior:'instant'}); }catch{ keep.scrollTop=0; } };
+  const finish=()=>{ const an=anim, tg=sp&&sp.target; anim=null; sp=null; x=0; v=0; pinDir=0; if(an) an.cancel(); if(tg) tg.style.transform=''; };
   /* Das Zurückfedern läuft als Web-Animation auf dem Compositor statt per Bild-für-Bild-Schleife im Hauptthread: Es ruckelt nicht mehr,
      wenn der Hauptthread gerade beschäftigt ist (Garbage Collection, Firestore-Updates, Layout). Die Kurve ist die exakte Feder-Lösung,
      abgetastet in Schritten von 1/120 s (auf ganze Geräte-Pixel gerundet). */
@@ -1116,12 +1108,15 @@ function legalHTML(doc){
     for(;;){
       const e=Math.exp(-W*t), xx=(A+B*t)*e, vv=(B-W*(A+B*t))*e;
       kf.push({transform:tr(xx)||'translate3d(0,0,0)'});
-      if(t>=1.4||(t>0.05&&Math.abs(xx)<0.15&&Math.abs(vv)<4)) break;
+      if(t>=1.4||(t>0.05&&Math.abs(xx)<2&&Math.abs(vv)<30)){
+        // Ausklang abkürzen: Die letzten Pixel kriechen sonst über 100+ ms mit winzigen Schritten (das Handy schaltet dabei die Bildrate herunter)
+        for(let j=1;j<=7;j++){ const f=1-j/7; kf.push({transform:tr(xx*f*f)||'translate3d(0,0,0)'}); }
+        break;
+      }
       t+=1/120;
     }
     kf[kf.length-1]={transform:'translate3d(0,0,0)'};
     sp={A,B,t0:performance.now(),target};
-    holdRate();
     anim=target.animate(kf,{duration:Math.max(16,(kf.length-1)*1000/120),easing:'linear',fill:'forwards'});
     anim.onfinish=finish;
   }
