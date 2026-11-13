@@ -66,20 +66,21 @@ html[data-design=glass] .vt em{font-style:normal}
 html[data-design=glass] .ul{display:none}
 html[data-design=glass] .brand{font-weight:800;letter-spacing:-.03em;color:var(--gr)}
 html[data-design=glass] .tickm path{stroke:var(--acc1);stroke-width:5}
-html[data-design=glass] .blk>h3,html[data-design=glass] .sec>h3{color:var(--mute);border-bottom:1px solid var(--rule2);letter-spacing:.12em}
+html[data-design=glass] .blk>h3,html[data-design=glass] .sec>h3{color:var(--mute);border-bottom:var(--g-line) solid var(--rule2);letter-spacing:.12em}
 html[data-design=glass] .lbl{color:var(--mute);letter-spacing:.08em}
 html[data-design=glass] .hno,html[data-design=glass] .ar i,html[data-design=glass] .medal,html[data-design=glass] .rr-head .no,html[data-design=glass] .nr,html[data-design=glass] .search .lab{color:var(--acc2)}
 html[data-design=glass][data-theme=dark] .hno,html[data-design=glass][data-theme=dark] .ar i,html[data-design=glass][data-theme=dark] .medal,html[data-design=glass][data-theme=dark] .rr-head .no,html[data-design=glass][data-theme=dark] .nr,html[data-design=glass][data-theme=dark] .search .lab{color:var(--acc1)}
 html[data-design=glass] .nr{font-weight:700;letter-spacing:.1em}
 
 /* ---------- Kopf und Reiter: Milchglas-Leisten ---------- */
-html[data-design=glass] .top{background:var(--g-bar);backdrop-filter:blur(22px) saturate(165%);-webkit-backdrop-filter:blur(22px) saturate(165%);border-bottom:var(--g-line) solid var(--g-edge);box-shadow:0 6px 24px rgba(var(--ink-rgb),.08)}
-html[data-design=glass] .stat{border:var(--g-line) solid transparent;background:var(--g-fill);border-radius:99px;padding:6px 13px;font-weight:700;letter-spacing:.06em;box-shadow:none}
+html[data-design=glass] .top{background:var(--g-bar);backdrop-filter:blur(22px) saturate(165%);-webkit-backdrop-filter:blur(22px) saturate(165%);border-bottom:0;box-shadow:0 6px 24px rgba(var(--ink-rgb),.08)}
+html[data-design=glass] .stat{border:0;background:var(--g-fill);border-radius:99px;padding:6px 13px;font-weight:700;letter-spacing:.06em;box-shadow:none}
 html[data-design=glass] .stat i{border-radius:50%;border-width:2px}
 html[data-design=glass] .crown{fill:#e0a21a}
-html[data-design=glass] .banner{background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);border:var(--g-line) solid transparent;border-radius:16px;box-shadow:var(--g-shadow);padding:11px 14px}
-html[data-design=glass] .banner.err{border-color:rgba(var(--red-rgb),.5);background:rgba(var(--red-rgb),.1)}
-html[data-design=glass] .tabbar{background:var(--g-bar);backdrop-filter:blur(24px) saturate(165%);-webkit-backdrop-filter:blur(24px) saturate(165%);border-top:var(--g-line) solid var(--g-edge);box-shadow:0 -8px 28px rgba(var(--ink-rgb),.1)}
+html[data-design=glass] .banner{background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);border:0;border-radius:16px;box-shadow:var(--g-shadow);padding:11px 14px}
+html[data-design=glass] .banner.err::after{background:rgba(var(--red-rgb),.5)}
+html[data-design=glass] .banner.err{background:rgba(var(--red-rgb),.1)}
+html[data-design=glass] .tabbar{background:var(--g-bar);backdrop-filter:blur(24px) saturate(165%);-webkit-backdrop-filter:blur(24px) saturate(165%);border-top:0;box-shadow:0 -8px 28px rgba(var(--ink-rgb),.1)}
 html[data-design=glass] .tabbar button{border-right:0;text-transform:none;letter-spacing:.01em;font-size:12px;font-weight:600;color:var(--mute)}
 html[data-design=glass] .tabbar button i{font-size:17px;color:var(--mute)}
 html[data-design=glass] .tabbar button.on{background:linear-gradient(180deg,rgba(var(--ink-rgb),.13),transparent);color:var(--ink)}
@@ -88,17 +89,17 @@ html[data-design=glass] .tabbar button.on::before{content:'';position:absolute;t
 html[data-design=glass] .tabbar .bdg{border-radius:99px;box-shadow:0 2px 8px rgba(var(--red-rgb),.45)}
 
 /* ---------- Suche, Auswahl, Chips ---------- */
-html[data-design=glass] .search{border:var(--g-line) solid transparent;background:var(--g-fill);backdrop-filter:blur(14px) saturate(165%);-webkit-backdrop-filter:blur(14px) saturate(165%);border-radius:16px;padding:0 14px;box-shadow:none}
+html[data-design=glass] .search{border:0;background:var(--g-fill);backdrop-filter:blur(14px) saturate(165%);-webkit-backdrop-filter:blur(14px) saturate(165%);border-radius:16px;padding:0 14px;box-shadow:none}
 html[data-design=glass] .sel{border:var(--g-line) solid var(--g-edge);background:var(--g-fill);border-radius:16px;padding:9px 12px;font-weight:600;box-shadow:none}
 html[data-design=glass][data-theme=dark] .sel{color-scheme:dark}
-html[data-design=glass] .chip{border:var(--g-line) solid transparent;background:var(--g-fill2);border-radius:99px;text-transform:none;font-weight:600;letter-spacing:0;font-size:13px;padding:7px 14px;color:var(--ink);box-shadow:none}
+html[data-design=glass] .chip{border:0;background:var(--g-fill2);border-radius:99px;text-transform:none;font-weight:600;letter-spacing:0;font-size:13px;padding:7px 14px;color:var(--ink);box-shadow:none}
 html[data-design=glass] .chip.on{background:var(--ink);color:var(--paper);border-color:transparent;box-shadow:0 4px 14px rgba(var(--ink-rgb),.28)}
-html[data-design=glass] .chip.sm{border-color:var(--rule2);color:var(--mute);padding:3px 10px;font-size:11.5px;box-shadow:none;background:transparent}
+html[data-design=glass] .chip.sm{border:var(--g-line) solid var(--rule2);color:var(--mute);padding:3px 10px;font-size:11.5px;box-shadow:none;background:transparent}
 html[data-design=glass] .sug-label{letter-spacing:.08em}
 html[data-design=glass] .tag{border-radius:99px;padding:1px 8px}
 
 /* ---------- Lehrer-Karten ---------- */
-html[data-design=glass] .trow{background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);border:var(--g-line) solid transparent;border-radius:var(--r);box-shadow:var(--g-shadow);
+html[data-design=glass] .trow{background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);border:0;border-radius:var(--r);box-shadow:var(--g-shadow);
   padding:20px 18px 16px;margin:14px 0 0;animation:glassIn .6s var(--ease) backwards;animation-delay:calc(var(--i,0)*60ms)}
 html[data-design=glass] .trow:nth-child(even){margin-left:0}
 html[data-design=glass] .trow:nth-child(3n){margin-right:0}
@@ -109,11 +110,11 @@ html[data-design=glass] .tr-sub{letter-spacing:.06em;text-transform:none;font-si
 html[data-design=glass] .cta{text-transform:none;letter-spacing:0;color:var(--acc2);font-weight:700}
 html[data-design=glass][data-theme=dark] .cta{color:var(--acc1)}
 html[data-design=glass] .done{text-decoration:none;color:var(--mute)}
-html[data-design=glass] .qbtn,html[data-design=glass] .x{border:var(--g-line) solid transparent;background:var(--g-fill);border-radius:99px;text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:700;padding:6px 13px;box-shadow:none}
+html[data-design=glass] .qbtn,html[data-design=glass] .x{border:0;background:var(--g-fill);border-radius:99px;text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:700;padding:6px 13px;box-shadow:none}
 html[data-design=glass] .qbtn:hover,html[data-design=glass] .x:hover{background:var(--ink);color:var(--paper)}
 
 /* Note: Ring, der sich entsprechend der Note füllt */
-html[data-design=glass] .grade{width:84px;height:84px;border-radius:50%;background:var(--g-fill2);border:var(--g-line) solid transparent;box-shadow:none}
+html[data-design=glass] .grade{width:84px;height:84px;border-radius:50%;background:var(--g-fill2);border:0;box-shadow:none}
 html[data-design=glass] .grade::before{content:'';position:absolute;inset:-5px;border-radius:50%;pointer-events:none;
   background:conic-gradient(from 0deg,var(--acc2),var(--acc1) calc(var(--v,0)/5*360deg),rgba(var(--ink-rgb),.12) 0);
   -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 6px),#000 calc(100% - 5px));
@@ -136,7 +137,7 @@ html[data-design=glass] .mt{font-size:12.5px}
 
 /* Auszeichnungen als zarte Pillen statt Stempel */
 html[data-design=glass] .stamp,html[data-design=glass] .stamp.s1,html[data-design=glass] .stamp.s2{transform:none;outline:0;border-radius:99px;text-transform:none;letter-spacing:0;font-weight:600;font-size:12px;padding:3px 11px;margin:2px;
-  border:1px solid rgba(var(--ink-rgb),.3);background:rgba(var(--ink-rgb),.1);color:var(--ink)}
+  border:var(--g-line) solid rgba(var(--ink-rgb),.3);background:rgba(var(--ink-rgb),.1);color:var(--ink)}
 html[data-design=glass] .stamp.s1{border-color:rgba(31,191,174,.4);background:rgba(31,191,174,.14)}
 html[data-design=glass] .stamp.s2{border-color:rgba(224,162,26,.45);background:rgba(224,162,26,.15);color:#8a5d00}
 html[data-design=glass][data-theme=dark] .stamp.s2{color:#f2c25a}
@@ -148,14 +149,14 @@ html[data-design=glass] .cb i{border:0;border-radius:10px 10px 4px 4px;backgroun
 html[data-design=glass] .dv::before{background:var(--rule2)}
 html[data-design=glass] .dvb{border-radius:6px}
 html[data-design=glass] .radar .rlab{font-family:var(--mono)}
-html[data-design=glass] .kpis{border:var(--g-line) solid transparent;border-radius:var(--r);background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);padding:6px 18px 0;box-shadow:var(--g-shadow)}
-html[data-design=glass] .kpi.lead{border-bottom:1px solid var(--rule2)}
+html[data-design=glass] .kpis{border:0;border-radius:var(--r);background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);padding:6px 18px 0;box-shadow:var(--g-shadow)}
+html[data-design=glass] .kpi.lead{border-bottom:var(--g-line) solid var(--rule2)}
 html[data-design=glass] .kpi b{font-weight:800;letter-spacing:-.04em}
 html[data-design=glass] .kpi.lead b{color:var(--ink);letter-spacing:-.05em}
 html[data-design=glass] .kpi3{border-bottom:0}
-html[data-design=glass] .kpi3 .kpi+.kpi{border-left:1px solid var(--rule2)}
-html[data-design=glass] .kpi3.top{border:var(--g-line) solid transparent;border-radius:var(--r);background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);padding:0 16px;box-shadow:var(--g-shadow)}
-html[data-design=glass] .sec{background:var(--g-fill);border:var(--g-line) solid transparent;border-radius:var(--r);padding:16px 18px;box-shadow:none}
+html[data-design=glass] .kpi3 .kpi+.kpi{border-left:var(--g-line) solid var(--rule2)}
+html[data-design=glass] .kpi3.top{border:0;border-radius:var(--r);background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);padding:0 16px;box-shadow:var(--g-shadow)}
+html[data-design=glass] .sec{background:var(--g-fill);border:0;border-radius:var(--r);padding:16px 18px;box-shadow:none}
 html[data-design=glass] .sec>h3{margin-top:0}
 html[data-design=glass] .lb{border-bottom-color:var(--rule2)}
 html[data-design=glass] .fact{border-left:3px solid var(--acc1);border-radius:3px}
@@ -163,27 +164,28 @@ html[data-design=glass] .fact b{color:var(--acc2)}
 html[data-design=glass][data-theme=dark] .fact b{color:var(--acc1)}
 html[data-design=glass] .hc{border-radius:9px;border-color:var(--rule)}
 html[data-design=glass] .hc.strong{border-color:var(--rule2)}
-html[data-design=glass] .empty{border:var(--g-line) solid transparent;border-radius:var(--r);background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);padding:26px 22px 18px;box-shadow:var(--g-shadow)}
+html[data-design=glass] .empty{border:0;border-radius:var(--r);background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);padding:26px 22px 18px;box-shadow:var(--g-shadow)}
 html[data-design=glass] .empty h3{font-weight:800;font-size:clamp(28px,8vw,40px);letter-spacing:-.03em}
 html[data-design=glass] .legend i{border-radius:3px}
 
 /* ---------- Formulare ---------- */
-html[data-design=glass] .btn{border:var(--g-line) solid transparent;background:var(--g-fill);backdrop-filter:blur(12px) saturate(165%);-webkit-backdrop-filter:blur(12px) saturate(165%);border-radius:16px;text-transform:none;letter-spacing:0;font-size:14px;font-weight:650;padding:11px 18px;color:var(--ink);box-shadow:0 2px 10px rgba(var(--ink-rgb),.08)}
+html[data-design=glass] .btn{border:0;background:var(--g-fill);backdrop-filter:blur(12px) saturate(165%);-webkit-backdrop-filter:blur(12px) saturate(165%);border-radius:16px;text-transform:none;letter-spacing:0;font-size:14px;font-weight:650;padding:11px 18px;color:var(--ink);box-shadow:0 2px 10px rgba(var(--ink-rgb),.08)}
 html[data-design=glass] .btn:hover{background:var(--ink);color:var(--paper)}
 html[data-design=glass] .btn:active{transform:scale(.98)}
 html[data-design=glass] .btn.primary{background:linear-gradient(135deg,var(--acc2),var(--acc1));color:var(--on-acc);border-color:transparent;box-shadow:0 6px 18px rgba(var(--ink-rgb),.28)}
 html[data-design=glass] .btn.primary:hover{background:linear-gradient(135deg,var(--acc1),var(--acc1));border-color:transparent}
 html[data-design=glass] .btn.ghost{background:transparent;border-color:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
-html[data-design=glass] .btn.danger{color:var(--red);border-color:rgba(var(--red-rgb),.4)}
+html[data-design=glass] .btn.danger{color:var(--red)}
+html[data-design=glass] .btn.danger::after{background:rgba(var(--red-rgb),.45)}
 html[data-design=glass] .btn.danger:hover{background:var(--red);color:#fff}
 html[data-design=glass] .btn.sm{padding:7px 14px;font-size:13px;border-radius:14px}
 html[data-design=glass] .recrow .btn.on{background:var(--ink);color:var(--paper)}
 html[data-design=glass] .recrow .btn.no.on{background:var(--red);border-color:transparent;color:#fff}
 html[data-design=glass] .inp{background:var(--g-fill);backdrop-filter:blur(10px) saturate(165%);-webkit-backdrop-filter:blur(10px) saturate(165%);border:var(--g-line) solid var(--g-edge);border-radius:16px;box-shadow:none}
 html[data-design=glass] .inp:focus{outline:2px solid var(--acc1);outline-offset:1px}
-html[data-design=glass] pre.code{background:var(--g-fill2);border:1px solid var(--rule2);border-radius:14px}
-html[data-design=glass] details{border:var(--g-line) solid transparent;border-radius:16px;background:var(--g-fill2)}
-html[data-design=glass] .namefield{border:var(--g-line) solid transparent;border-radius:18px;background:var(--g-fill);padding:10px 16px;box-shadow:none}
+html[data-design=glass] pre.code{background:var(--g-fill2);border:var(--g-line) solid var(--rule2);border-radius:14px}
+html[data-design=glass] details{border:0;border-radius:16px;background:var(--g-fill2)}
+html[data-design=glass] .namefield{border:0;border-radius:18px;background:var(--g-fill);padding:10px 16px;box-shadow:none}
 html[data-design=glass] .namefield .lab{color:var(--mute)}
 html[data-design=glass] .lrow{border-radius:14px;padding:11px 8px;border-bottom-color:var(--rule)}
 html[data-design=glass] .lrow:not(.static):hover{background:rgba(var(--ink-rgb),.07)}
@@ -193,15 +195,15 @@ html[data-design=glass] .backdrop{background:var(--g-scrim);backdrop-filter:blur
 html[data-design=glass] .sheet{background:var(--g-sheet);background-image:none;backdrop-filter:blur(30px) saturate(165%);-webkit-backdrop-filter:blur(30px) saturate(165%);border:var(--g-line) solid var(--g-edge);border-top-width:var(--g-line);border-radius:28px 28px 0 0;box-shadow:0 -10px 50px rgba(var(--ink-rgb),.18)}
 @media(min-width:720px){html[data-design=glass] .sheet{border-radius:28px;border:var(--g-line) solid var(--g-edge)}}
 html[data-design=glass] .sh h2{letter-spacing:-.02em}
-html[data-design=glass] .av{border:var(--g-line) solid transparent;border-radius:14px;background:var(--g-fill2);color:var(--ink);box-shadow:none}
+html[data-design=glass] .av{border:0;border-radius:14px;background:var(--g-fill2);color:var(--ink);box-shadow:none}
 html[data-design=glass] .av.lg{background-image:none;border-radius:22px}
 html[data-design=glass] .d-name{font-weight:800;letter-spacing:-.035em}
-html[data-design=glass] .d-score{border:var(--g-line) solid transparent;border-radius:var(--r);background:var(--g-fill2);padding:18px 18px}
+html[data-design=glass] .d-score{border:0;border-radius:var(--r);background:var(--g-fill2);padding:18px 18px}
 html[data-design=glass] .d-sec h4{color:var(--mute);letter-spacing:.12em}
-html[data-design=glass] .d-actions{background:var(--g-bar);backdrop-filter:blur(22px) saturate(165%);-webkit-backdrop-filter:blur(22px) saturate(165%);border-top:var(--g-line) solid var(--g-edge)}
+html[data-design=glass] .d-actions{background:var(--g-bar);backdrop-filter:blur(22px) saturate(165%);-webkit-backdrop-filter:blur(22px) saturate(165%);border-top:0}
 html[data-design=glass] .rr-head b{font-size:19px;letter-spacing:-.01em}
 html[data-design=glass] .rr-txt{color:var(--ink);letter-spacing:.04em;text-transform:none;font-size:12px}
-html[data-design=glass] .st{border:var(--g-line) solid transparent;border-radius:14px;background:var(--g-fill2);color:var(--ink);box-shadow:none}
+html[data-design=glass] .st{border:0;border-radius:14px;background:var(--g-fill2);color:var(--ink);box-shadow:none}
 html[data-design=glass] .st.on{background:linear-gradient(135deg,var(--acc2),var(--acc1));color:var(--on-acc);border-color:transparent}
 html[data-design=glass] .lesson-val{font-weight:800;letter-spacing:-.05em}
 html[data-design=glass] .rw::before{height:6px;border-radius:99px;background:rgba(var(--ink-rgb),.15)}
@@ -214,7 +216,7 @@ html[data-design=glass] .range::-moz-range-thumb{width:28px;height:28px;border-r
 html[data-design=glass] .cmpt td.best{text-decoration:none;color:var(--acc2)}
 html[data-design=glass][data-theme=dark] .cmpt td.best{color:var(--acc1)}
 html[data-design=glass] .winner{font-weight:800;letter-spacing:-.03em}
-html[data-design=glass] .toast{background:var(--g-toast);color:var(--g-toast-fg);backdrop-filter:blur(18px) saturate(165%);-webkit-backdrop-filter:blur(18px) saturate(165%);border:var(--g-line) solid transparent;border-radius:16px}
+html[data-design=glass] .toast{background:var(--g-toast);color:var(--g-toast-fg);backdrop-filter:blur(18px) saturate(165%);-webkit-backdrop-filter:blur(18px) saturate(165%);border:0;border-radius:16px}
 html[data-design=glass] .stampPop span{transform:none;outline:0;border:var(--g-line) solid var(--g-edge);border-radius:28px;background:var(--g-sheet);backdrop-filter:blur(24px) saturate(165%);-webkit-backdrop-filter:blur(24px) saturate(165%);color:var(--ink);
   font-weight:800;text-transform:none;letter-spacing:-.03em;padding:.18em .5em;font-size:clamp(34px,11vw,68px);box-shadow:0 20px 60px rgba(var(--ink-rgb),.3);
   animation:glassPop 1.3s var(--ease) both}
@@ -232,7 +234,8 @@ html[data-design=glass] .stampPop span{transform:none;outline:0;border:var(--g-l
 
 /* ---------- Glasrand mit Lupen-Effekt ----------
    Der Rand ist überall exakt --g-line dick (ein Geräte-Pixel) und hellt zugleich das, was dahinter liegt, auf und erhöht den Kontrast.
-   Technik: transparenter Rand + Ring als ::after (Maske schneidet die Mitte aus) mit eigenem backdrop-filter. */
+   Technik: Ring als ::after mit eigenem ECHTEN Rand (border) und Maske: Der Browser rundet echte Ränder auf ganze Geräte-Pixel, daher ist der Ring
+   an allen vier Seiten gleich dick (mit padding wurde er je nach Position oben dicker und unten dünner). Der Ring hat einen eigenen backdrop-filter. */
 html[data-design=glass] .stat,
 html[data-design=glass] .search,
 html[data-design=glass] .chip,
@@ -270,17 +273,17 @@ html[data-design=glass] .d-score::after,
 html[data-design=glass] .trow::after,
 html[data-design=glass] .banner::after,
 html[data-design=glass] .toast::after,
-html[data-design=glass] details::after{content:'';position:absolute;inset:calc(-1*var(--g-line));border-radius:inherit;padding:var(--g-line);pointer-events:none;
+html[data-design=glass] details::after{content:'';position:absolute;inset:0;border-radius:inherit;border:var(--g-line) solid transparent;pointer-events:none;
   background:var(--g-rim-bg);
   backdrop-filter:var(--g-rim-fx);-webkit-backdrop-filter:var(--g-rim-fx);
-  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;
-  mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask-composite:exclude}
+  -webkit-mask:linear-gradient(#fff 0 0) padding-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#fff 0 0) padding-box,linear-gradient(#fff 0 0);mask-composite:exclude}
 html[data-design=glass] .btn.ghost::after,html[data-design=glass] .chip.sm::after{display:none}
 /* Leisten: nur eine gerade Kante */
-html[data-design=glass] .top{border-bottom:var(--g-line) solid transparent}
-html[data-design=glass] .tabbar{border-top:var(--g-line) solid transparent}
-html[data-design=glass] .d-actions{border-top:var(--g-line) solid transparent}
-html[data-design=glass] .top::after,html[data-design=glass] .tabbar::after,html[data-design=glass] .d-actions::after{content:'';position:absolute;left:0;right:0;height:var(--g-line);pointer-events:none;
+html[data-design=glass] .top{border-bottom:0}
+html[data-design=glass] .tabbar{border-top:0}
+html[data-design=glass] .d-actions{border-top:0}
+html[data-design=glass] .top::after,html[data-design=glass] .tabbar::after,html[data-design=glass] .d-actions::after{content:'';position:absolute;left:0;right:0;height:0;border-top:var(--g-line) solid transparent;pointer-events:none;
   background:var(--g-rim-bg);backdrop-filter:var(--g-rim-fx);-webkit-backdrop-filter:var(--g-rim-fx)}
-html[data-design=glass] .top::after{bottom:calc(-1*var(--g-line))}
-html[data-design=glass] .tabbar::after,html[data-design=glass] .d-actions::after{top:calc(-1*var(--g-line))}
+html[data-design=glass] .top::after{bottom:0;top:auto}
+html[data-design=glass] .tabbar::after,html[data-design=glass] .d-actions::after{top:0}
