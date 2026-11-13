@@ -16,6 +16,7 @@ html[data-design=glass]{
   --disp:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Roboto,sans-serif;
   --mono:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Roboto,sans-serif;
   --r:22px;
+  --g-shape:superellipse(1.5);   /* Eckenform wie Apples "continuous corners": sanfter Übergang, keine sichtbare Ecke. 1 = normal rund, 2 = klassischer Squircle (kantiger) */
   --g-rim-bg:rgba(255,255,255,.34);--g-rim-fx:brightness(1.6) contrast(1.45) saturate(1.25);
   --g-line:.5px;   /* Dicke des Glasrands. app.js überschreibt das mit genau 1 Geräte-Pixel (1 / Pixeldichte); dieser Wert gilt nur als Ersatz */
   scrollbar-color:rgba(var(--ink-rgb),.4) transparent;
@@ -287,3 +288,42 @@ html[data-design=glass] .top::after,html[data-design=glass] .tabbar::after,html[
   background:var(--g-rim-bg);backdrop-filter:var(--g-rim-fx);-webkit-backdrop-filter:var(--g-rim-fx)}
 html[data-design=glass] .top::after{bottom:0;top:auto}
 html[data-design=glass] .tabbar::after,html[data-design=glass] .d-actions::after{top:0}
+
+/* ---------- Eckenform: weiche "continuous" Ecken (Squircle) statt Kreisbogen ----------
+   Nur für Flächen mit abgerundeten Ecken. Pillen und Kreise (Chips, Knöpfe mit voller Rundung, Noten-Ring) bleiben echte Halbkreise.
+   corner-shape gibt es in Chrome/Edge ab Version 139. Wo es fehlt (z. B. ältere Safari), bleibt die normale Rundung. */
+html[data-design=glass] .trow,
+html[data-design=glass] .trow::after,
+html[data-design=glass] .kpis,
+html[data-design=glass] .kpis::after,
+html[data-design=glass] .kpi3.top,
+html[data-design=glass] .kpi3.top::after,
+html[data-design=glass] .sec,
+html[data-design=glass] .sec::after,
+html[data-design=glass] .empty,
+html[data-design=glass] .empty::after,
+html[data-design=glass] .banner,
+html[data-design=glass] .banner::after,
+html[data-design=glass] .search,
+html[data-design=glass] .search::after,
+html[data-design=glass] .sel,
+html[data-design=glass] .btn,
+html[data-design=glass] .btn::after,
+html[data-design=glass] .inp,
+html[data-design=glass] .namefield,
+html[data-design=glass] .namefield::after,
+html[data-design=glass] .av,
+html[data-design=glass] .av::after,
+html[data-design=glass] .st,
+html[data-design=glass] .st::after,
+html[data-design=glass] .d-score,
+html[data-design=glass] .d-score::after,
+html[data-design=glass] .sheet,
+html[data-design=glass] .toast,
+html[data-design=glass] .toast::after,
+html[data-design=glass] details,
+html[data-design=glass] details::after,
+html[data-design=glass] pre.code,
+html[data-design=glass] .stampPop span,
+html[data-design=glass] .lrow,
+html[data-design=glass] .hc{corner-shape:var(--g-shape)}
