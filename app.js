@@ -1078,6 +1078,7 @@ function legalHTML(doc){
   let x=0,v=0,raf=0;
   let y0=0,dir=0,active=false,touching=false;
   let mT=0,mV=0;
+  let pinDir=0,pinMax=0;                                // Rand, an dem gerade gezogen/gefedert wird (+1 oben, -1 unten) und seine scrollTop-Grenze
   let lastTop=0,lastV=0,lastSc=null; const hist=[];
   const DIM=()=>Math.max(300,sc.clientHeight*0.8);
   const rubber=d=>{ const m=DIM(); return (1-1/((d*0.6/m)+1))*m; };
@@ -1090,10 +1091,14 @@ function legalHTML(doc){
     stop();
     const target=el, A=x, B=v+W*x, t0=performance.now();
     const step=now=>{
-      const t=(now-t0)/1000, e=Math.exp(-W*t);
+      // Der Bild-Zeitstempel kann vor performance.now() liegen (z. B. beim Start aus dem Scroll-Ereignis): t darf nie negativ sein,
+      // sonst springt die erste Feder-Position ein paar Pixel in die Gegenrichtung.
+      const t=Math.max(0,(now-t0)/1000), e=Math.exp(-W*t);
       x=(A+B*t)*e; v=(B-W*(A+B*t))*e;
       if(target) target.style.transform=x?`translate3d(0,${x.toFixed(2)}px,0)`:'';
-      if(t>1.4||(Math.abs(x)<0.15&&Math.abs(v)<4)){ x=0; v=0; if(target) target.style.transform=''; raf=0; return; }
+      // Beim Zurückfedern ohne Finger nicht nativ nachscrollen lassen (sonst läuft ein nativer Schwung gegen die Feder)
+      if(pinDir&&!touching&&sc){ const edge=pinDir>0?0:pinMax; if(Math.abs(sc.scrollTop-edge)>0.5) sc.scrollTop=edge; }
+      if(t>1.4||(Math.abs(x)<0.15&&Math.abs(v)<4)){ x=0; v=0; pinDir=0; if(target) target.style.transform=''; raf=0; return; }
       raf=requestAnimationFrame(step);
     };
     raf=requestAnimationFrame(step);
@@ -1104,18 +1109,28 @@ function legalHTML(doc){
     if(!n||(document.body.classList.contains('lock')&&n.id==='scroller')){ touching=false; return; }
     if(el&&el!==contentOf(n)){ const o=el; reset(); o.style.transform=''; }
     sc=n; el=contentOf(n); if(!el){ touching=false; return; }
-    touching=true; active=false; reset();
+    // Eine noch laufende Feder wird nicht mehr hart auf 0 gesetzt (das war ein sichtbarer Sprung beim erneuten Antippen),
+    // sie läuft weiter bzw. wird beim erneuten Ziehen nahtlos übernommen.
+    touching=true; active=false; pinDir=0;
     y0=e.touches[0].clientY; mT=e.timeStamp; mV=0;
   },{passive:true});
   document.addEventListener('touchmove',e=>{
     if(!touching||!sc||e.touches.length!==1) return;
     const y=e.touches[0].clientY, dy=y-y0, top=sc.scrollTop, max=sc.scrollHeight-sc.clientHeight;
     if(!active){
-      if((dy>0&&top<=0)||(dy<0&&top>=max-1)){ active=true; dir=dy>0?1:-1; y0=y; mT=e.timeStamp; mV=0; x=0; }
+      if((dy>0&&top<=0)||(dy<0&&top>=max-1)){
+        active=true; dir=dy>0?1:-1; mT=e.timeStamp; mV=0; pinDir=dir; pinMax=max;
+        if(raf&&x*dir>0){
+          // Die Feder läuft noch in dieselbe Richtung: Finger greift sie dort, wo sie gerade ist (Umkehrung der Gummiband-Kurve)
+          stop(); const m=DIM(), r=Math.min(Math.abs(x)/m,0.97); y0=y-dir*(r/(1-r))*m/0.6; v=0;
+        } else { stop(); y0=y; x=0; v=0; draw(); }
+      }
       return;
     }
     const d=(y-y0)*dir;
-    if(d<=0){ active=false; x=0; v=0; draw(); return; }
+    // Beim Zurückziehen würde der Browser sofort wieder nativ scrollen und die Gummiband-Bewegung verdoppeln: am Rand festhalten
+    { const edge=pinDir>0?0:pinMax; if(Math.abs(sc.scrollTop-edge)>0.5) sc.scrollTop=edge; }
+    if(d<=0){ active=false; pinDir=0; x=0; v=0; draw(); return; }
     const nx=dir*rubber(d), dt=Math.max(1,e.timeStamp-mT);
     mV=0.6*mV+0.4*((nx-x)/dt*1000); mT=e.timeStamp;
     x=nx; draw();
@@ -1138,7 +1153,7 @@ function legalHTML(doc){
     if(!touching&&max>0&&atEdge&&!wasEdge&&Math.abs(lastV)>0.25){
       stop(); if(el&&el!==contentOf(n)) el.style.transform='';
       sc=n; el=contentOf(n);
-      if(el){ const cap=n.clientHeight*0.12*W*Math.E; x=0; v=Math.max(-cap,Math.min(cap,-lastV*1000*0.6)); spring(); }
+      if(el){ const cap=n.clientHeight*0.12*W*Math.E; x=0; v=Math.max(-cap,Math.min(cap,-lastV*1000*0.6)); pinDir=lastV<0?1:-1; pinMax=max; spring(); }
     }
     if(hist.length>1&&Math.abs(vel)>0.02) lastV=vel;
     lastTop=top;
