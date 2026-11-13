@@ -1323,8 +1323,8 @@ function legalHTML(doc){
   const sc=document.getElementById('scroller'), el=document.getElementById('app');
   if(!sc||!el||!/Android/i.test(navigator.userAgent)) return;
   document.body.classList.add('android');
-  const DIM=420, K=150, C=2*Math.sqrt(K)*0.8;           // Federsteifigkeit und Dämpfung
-  const rubber=d=>(1-1/((d*0.55/DIM)+1))*DIM;
+  const DIM=620, K=120, C=2*Math.sqrt(K)*0.55;           // Federsteifigkeit und Dämpfung
+  const rubber=d=>(1-1/((d*0.85/DIM)+1))*DIM;
   let x=0,v=0,raf=0,tPrev=0;                            // Versatz (px), Tempo (px/s)
   let y0=0,dir=0,active=false,touching=false;
   let mY=0,mT=0,mV=0;                                   // Fingertempo
@@ -1366,13 +1366,16 @@ function legalHTML(doc){
   };
   sc.addEventListener('touchend',end,{passive:true});
   sc.addEventListener('touchcancel',end,{passive:true});
+  const hist=[];
   sc.addEventListener('scroll',()=>{
     const now=performance.now(), top=sc.scrollTop, max=sc.scrollHeight-sc.clientHeight;
-    const dt=Math.max(1,now-lastT), vel=(top-lastTop)/dt;   // px/ms
-    if(!touching&&max>0&&now-lastT<64&&Math.abs(lastV)>0.6&&((top<=0&&lastTop>0)||(top>=max-1&&lastTop<max-1))){
-      x=0; v=Math.max(-900,Math.min(900,-lastV*320)); spring();
+    hist.push({top,t:now}); while(hist.length>2&&now-hist[0].t>110) hist.shift();
+    const h0=hist[0], vel=(top-h0.top)/Math.max(1,now-h0.t);       // px/ms über die letzten ~100 ms
+    const atEdge=top<=0||top>=max-1, wasEdge=lastTop<=0||lastTop>=max-1;
+    if(!touching&&max>0&&atEdge&&!wasEdge&&Math.abs(lastV)>0.25){
+      x=0; v=Math.max(-2000,Math.min(2000,-lastV*900)); spring();
     }
-    if(Math.abs(vel)>0.02){ lastV=vel; }
+    if(hist.length>1&&Math.abs(vel)>0.02) lastV=vel;
     lastTop=top; lastT=now;
   },{passive:true});
 })();
