@@ -12,6 +12,7 @@ const FIREBASE_CONFIG = {
   appId: "1:355339313897:web:5f02ddd2546f7d65bb8678"
 };
 const FB_VERSION = '10.12.2';
+const BUILD = '13.11.2026 19:06';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
 const LESSON_W = 0.10;   // Anteil der Stunden-Punkte an der Gesamtnote (10 %)
 const MIN_N = 3;         // Mindestanzahl Bewertungen (bzw. Schüler bei Stunden), bevor Ergebnisse gezeigt werden
 // Farben als CSS-Variablen, damit sie im Dunkelmodus mitwechseln
@@ -740,6 +741,7 @@ function viewMe(){
   ${todo.length?`<section class="blk"><h3>Noch nicht bewertet (${todo.length})</h3>${todo.map(a=>`<div class="lrow" data-act="rate" data-id="${esc(a.t.id)}">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${esc((a.t.subjects||[]).join(', '))}</small></div><span class="cta">Bewerten</span></div>`).join('')}</section>`:''}
   ${mine.length?`<section class="blk"><h3>Meine Bewertungen</h3>${mine.map(r=>{ const a=S.A.get(r.teacherId); return `<div class="lrow" data-act="rate" data-id="${esc(a.t.id)}">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDate(ts(r))}${r.subject?' · '+esc(r.subject):''}</small></div>${boxes(ovr(r),'xs')}<span class="pts" style="font-size:20px">${fmt(ovr(r))}</span></div>`; }).join('')}</section>`:''}
   ${myLessons.length?`<section class="blk"><h3>Meine Stunden (zuletzt)</h3>${myLessons.slice(0,8).map(l=>{ const a=S.A.get(l.teacherId); return `<div class="lrow static">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDay(l.day)}</small></div><span class="pts" style="color:${lessonColor(l.points)}">${fmtPts(l.points)}</span></div>`; }).join('')}</section>`:''}
+  <p class="note" style="text-align:center;margin-top:30px">Version ${esc(BUILD)}</p>
   <section class="blk"><h3>Werkzeuge</h3><div class="tools">
     <button class="btn" data-act="theme">${isDark()?'Hellmodus':'Dunkelmodus'}</button>
     <button class="btn" data-act="design">${isGlass()?'Papier-Design':'Glas-Design (Beta)'}</button>
@@ -1509,6 +1511,35 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id==='nameIn'){ e.preventDefault(); H['save-name'](null); }
   if(e.target.id==='tSubj'&&(e.key==='Enter'||e.key===',')){ e.preventDefault(); H['subj-add'](); }
 });
+
+/* ---------- Diagnose (nur mit ?diag in der Adresse) ----------
+   Zeigt oben auf dem Bildschirm, ob beim Federn Bilder ausfallen und was den Hauptthread aufhält (Long Animation Frames). */
+(function diag(){
+  if(!/[?&]diag\b/.test(location.search)) return;
+  const box=document.createElement('pre');
+  box.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;margin:0;padding:calc(6px + env(safe-area-inset-top)) 8px 6px;font:11px/1.35 monospace;background:rgba(0,0,0,.82);color:#9fffa8;pointer-events:none;white-space:pre-wrap;max-height:50vh;overflow:hidden';
+  document.body.appendChild(box);
+  const log=['Diagnose an, Version '+BUILD,'Zieh über den oberen/unteren Rand und lass los.']; const show=()=>{ while(log.length>16) log.splice(2,1); box.textContent=log.join('\n'); }; show();
+  const add=s=>{ log.push(s); show(); };
+  try{
+    new PerformanceObserver(l=>l.getEntries().forEach(e=>{
+      if(e.duration<18) return;
+      const sc=(e.scripts||[]).map(s=>(s.invoker||s.sourceFunctionName||'?')+' '+Math.round(s.duration)+'ms').join(', ');
+      const sl=e.styleAndLayoutStart?Math.round(e.startTime+e.duration-e.styleAndLayoutStart):0;
+      add('HAUPTTHREAD '+Math.round(e.startTime)+'ms: Bild '+Math.round(e.duration)+'ms, blockiert '+Math.round(e.blockingDuration||0)+'ms, Style/Layout '+sl+'ms'+(sc?' | '+sc:''));
+    })).observe({type:'long-animation-frame',buffered:false});
+  }catch{ add('Long-Animation-Frames nicht verfügbar'); }
+  // Bildabstände nach dem Loslassen messen
+  document.addEventListener('touchend',()=>{
+    const ts=[]; const t0=performance.now();
+    const f=n=>{ ts.push(n); if(n-t0<600) requestAnimationFrame(f); else {
+      const gaps=ts.slice(1).map((t,i)=>t-ts[i]); const med=[...gaps].sort((a,b)=>a-b)[gaps.length>>1]||8.3;
+      const bad=gaps.map((g,i)=>({g,at:ts[i]-t0})).filter(x=>x.g>med*1.6);
+      add('Feder: '+ts.length+' Bilder, normal '+med.toFixed(1)+'ms, Aussetzer '+bad.length+(bad.length?': '+bad.slice(0,6).map(x=>Math.round(x.g)+'ms bei '+Math.round(x.at)+'ms').join(', '):''));
+    } };
+    requestAnimationFrame(f);
+  },{passive:true});
+})();
 
 /* ---------- Start ---------- */
 /* Glas-Design: Randdicke = genau 1 Geräte-Pixel (1 / Pixeldichte), also das Dünnste, was die Anzeige zeichnen kann.
