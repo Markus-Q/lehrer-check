@@ -12,7 +12,7 @@ const FIREBASE_CONFIG = {
   appId: "1:355339313897:web:5f02ddd2546f7d65bb8678"
 };
 const FB_VERSION = '10.12.2';
-const BUILD = '13.11.2026 19:50';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
+const BUILD = '13.11.2026 20:13';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
 const LESSON_W = 0.10;   // Anteil der Stunden-Punkte an der Gesamtnote (10 %)
 const LESSON_DAYS = 60;  // Es werden nur Stunden der letzten 60 Tage geladen: spart Lese-Kontingent bei Firebase und hält die Stunden-Stimmung aktuell
 const MIN_N = 3;         // Mindestanzahl Bewertungen (bzw. Schüler bei Stunden), bevor Ergebnisse gezeigt werden
@@ -1609,6 +1609,21 @@ document.addEventListener('keydown',e=>{
     } };
     requestAnimationFrame(f);
   },{passive:true});
+})();
+
+/* ---------- Versionsprüfung ----------
+   GitHub Pages cached Dateien bis zu 10 Minuten. Ist version.txt (immer frisch geholt) neuer als der laufende Stand, wird die Seite
+   mit neuer Adresse (?v=…) geladen. Dann kommen auch app.js und die Stile frisch (index.html hängt ?v=… an). Pro neuer Version nur ein Versuch
+   innerhalb von 3 Minuten, damit es keine Schleife gibt. bump.mjs setzt die Versionen bei jedem Commit. */
+(function checkVersion(){
+  fetch('version.txt',{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
+    t=(t||'').trim(); if(!t||t===BUILD) return;
+    const last=(ls.get('lc_vcheck','')||'').split('|');
+    if(last[0]===t&&Date.now()-Number(last[1]||0)<180000) return;
+    ls.set('lc_vcheck',t+'|'+Date.now());
+    const q=new URLSearchParams(location.search); q.set('v',t.replace(/\D/g,''));
+    location.replace(location.pathname+'?'+q.toString());
+  }).catch(()=>{});
 })();
 
 /* ---------- Start ---------- */
