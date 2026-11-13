@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bildraten-Test</title>
+<style>
+  :root{color-scheme:light dark}
+  body{margin:0;padding:14px;font:16px/1.4 system-ui,sans-serif;background:#f4f1e8;color:#222}
+  h1{font-size:20px;margin:0 0 6px}
+  p{margin:6px 0;color:#444;font-size:14px}
+  .btns{display:grid;gap:10px;margin:14px 0}
+  button{font:inherit;font-weight:700;padding:16px 14px;border:2px solid #1b2a6b;background:#fff;color:#1b2a6b;border-radius:10px;text-align:left;touch-action:manipulation}
+  button small{display:block;font-weight:400;color:#555;font-size:12.5px;margin-top:2px}
+  #out{white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace;background:#101418;color:#9fffa8;padding:10px;border-radius:10px;min-height:120px}
+  #big{position:fixed;left:0;right:0;bottom:0;height:35vh;background:linear-gradient(135deg,#6fd8c8,#ffd884);opacity:.55;pointer-events:none;z-index:0}
+  #vis{height:150px;overflow:auto;border:1px solid #888;background:#fff;margin:10px 0}
+  #vis div{height:6000px;background:repeating-linear-gradient(#fff 0 30px,#e6efed 30px 60px)}
+  #tiny{position:fixed;left:0;bottom:0;width:3px;height:3px;overflow:auto;opacity:.02;pointer-events:none;z-index:-1}
+  #tiny div{width:1px;height:30000px}
+  #huge{position:fixed;inset:0;overflow:auto;opacity:.01;pointer-events:none;z-index:-1}
+  #huge div{width:1px;height:30000px}
+  main{position:relative;z-index:1}
+</style>
+</head>
+<body>
+<div id="tiny"><div></div></div>
+<div id="huge"><div></div></div>
+<div id="big"></div>
+<main>
+  <h1>Bildraten-Test</h1>
+  <p>Tippe einen Knopf an und lass los. Gemessen wird danach 0,7 Sekunden lang, mit wie viel Hz Chrome die Seite zeichnet. 120 Hz = gut, 60 Hz = schlecht.</p>
+  <p id="dev"></p>
+  <div class="btns" id="btns"></div>
+  <div id="vis"><div></div></div>
+  <div id="out">Noch keine Messung.</div>
+</main>
+<script>
+const out=document.getElementById('out'), lines=[];
+document.getElementById('dev').textContent='Pixeldichte '+devicePixelRatio+', Fenster '+innerWidth+' x '+innerHeight;
+const big=document.getElementById('big'), tiny=document.getElementById('tiny'), huge=document.getElementById('huge'), vis=document.getElementById('vis');
+const springAnim=()=>big.animate([{transform:'translateY(90px)'},{transform:'translateY(0)'}],{duration:600,easing:'cubic-bezier(.2,.8,.2,1)'});
+const V=[
+ ['A','Nichts (Grundlinie)','nur messen',()=>()=>{}],
+ ['B','Animation wie die Feder','Transform-Animation auf großer Fläche',()=>{ const a=springAnim(); return ()=>a.cancel(); }],
+ ['C','B + winziger Scrollbereich','3x3 Pixel, weiches Scrollen (war der letzte Versuch)',()=>{ const a=springAnim(); tiny.scrollTop=0; tiny.scrollTo({top:3000,behavior:'smooth'}); return ()=>{ a.cancel(); tiny.scrollTop=0; }; }],
+ ['D','B + Vollbild-Scrollbereich','unsichtbar, ganzer Bildschirm, weiches Scrollen',()=>{ const a=springAnim(); huge.scrollTop=0; huge.scrollTo({top:3000,behavior:'smooth'}); return ()=>{ a.cancel(); huge.scrollTop=0; }; }],
+ ['E','Sichtbares Scrollfeld, weich','Feld unten auf der Seite scrollt weich',()=>{ vis.scrollTop=0; vis.scrollTo({top:3000,behavior:'smooth'}); return ()=>{ vis.scrollTop=0; }; }],
+ ['F','Sichtbares Scrollfeld per Skript','scrollTop wird in jedem Bild gesetzt',()=>{ let on=true,y=0; const f=()=>{ if(!on) return; y+=18; vis.scrollTop=y; requestAnimationFrame(f); }; requestAnimationFrame(f); return ()=>{ on=false; vis.scrollTop=0; }; }],
+ ['G','Ganze Seite scrollt weich','Fenster scrollt weich nach unten und zurück',()=>{ const y0=scrollY; window.scrollTo({top:y0+400,behavior:'smooth'}); return ()=>window.scrollTo({top:y0,behavior:'instant'}); }],
+];
+const box=document.getElementById('btns');
+V.forEach(([id,t,s,fn])=>{ const b=document.createElement('button'); b.innerHTML=id+': '+t+'<small>'+s+'</small>'; box.appendChild(b);
+  let downTs=null;
+  b.addEventListener('touchstart',()=>{ const mine=downTs=[]; const f=n=>{ if(downTs!==mine) return; mine.push(n); requestAnimationFrame(f); }; requestAnimationFrame(f); },{passive:true});
+  const run=()=>{
+    const med=a=>{ const g=a.slice(1).map((v,i)=>v-a[i]); return g.length>3?[...g].sort((p,q)=>p-q)[g.length>>1]:0; };
+    const down=downTs&&downTs.length>4?med(downTs):0; downTs=null;
+    const stop=fn(); const ts=[]; const t0=performance.now();
+    const f=n=>{ ts.push(n); if(n-t0<700) requestAnimationFrame(f); else { stop();
+      const g=ts.slice(1).map((v,i)=>v-ts[i]); const m=med(ts); const fast=g.filter(x=>x<11).length;
+      lines.unshift(id+': Finger unten '+(down?(1000/down).toFixed(0)+' Hz':'-')+' | danach '+(1000/m).toFixed(0)+' Hz (Median '+m.toFixed(1)+' ms), '+Math.round(100*fast/g.length)+' % der Bilder schnell');
+      out.textContent=lines.slice(0,12).join('\n'); } };
+    requestAnimationFrame(f);
+  };
+  b.addEventListener('touchend',()=>{ setTimeout(run,0); },{passive:true});
+  b.addEventListener('click',e=>{ if(e.detail===0||!('ontouchstart' in window)) run(); });
+});
+</script>
+</body>
+</html>
