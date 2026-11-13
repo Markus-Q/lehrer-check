@@ -46,7 +46,7 @@ body{
 html{height:100%;overflow:hidden;overscroll-behavior:none}
 .top{flex:none}
 #scroller{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;position:relative;z-index:2;padding-bottom:calc(92px + env(safe-area-inset-bottom))}
-body.android #scroller{overscroll-behavior-y:none}
+body.android #scroller{overscroll-behavior-y:none;touch-action:pan-y}
 #app{will-change:transform}
 body.lock #scroller{overflow:hidden}
 button,[data-act],.chip,select,label.search{
@@ -1318,43 +1318,61 @@ function legalHTML(doc){
   <h3>Deine Rechte</h3>
   <p>Du kannst Auskunft, Berichtigung, Löschung, Einschränkung und Widerspruch verlangen (Art. 15–21 DSGVO). Lehrkräfte können jederzeit verlangen, dass ihr Eintrag samt Bewertungen gelöscht wird. Schreib dafür an die E-Mail oben. Außerdem hast du das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren.</p></div>`;
 }
-/* Android: eigenes Überziehen mit Zurückfedern (iOS macht das nativ im Scrollbereich) */
+/* Android: eigenes Überziehen mit Feder-Physik (iOS macht das nativ im Scrollbereich) */
 (function(){
   const sc=document.getElementById('scroller'), el=document.getElementById('app');
   if(!sc||!el||!/Android/i.test(navigator.userAgent)) return;
   document.body.classList.add('android');
-  const DIM=320, SPRING='transform .55s cubic-bezier(.2,.9,.3,1.3)';
+  const DIM=420, K=150, C=2*Math.sqrt(K)*0.8;           // Federsteifigkeit und Dämpfung
   const rubber=d=>(1-1/((d*0.55/DIM)+1))*DIM;
-  let y0=0,dir=0,active=false,touching=false,lastTop=0,lastT=0,lastV=0,t1=0;
-  const set=(px,tr)=>{ el.style.transition=tr||'none'; el.style.transform=px?`translateY(${px}px)`:''; };
+  let x=0,v=0,raf=0,tPrev=0;                            // Versatz (px), Tempo (px/s)
+  let y0=0,dir=0,active=false,touching=false;
+  let mY=0,mT=0,mV=0;                                   // Fingertempo
+  let lastTop=0,lastT=0,lastV=0;
+  const draw=()=>{ el.style.transform=x?`translate3d(0,${x.toFixed(2)}px,0)`:''; };
+  const stop=()=>{ cancelAnimationFrame(raf); raf=0; };
+  function spring(){
+    stop(); tPrev=performance.now();
+    const step=now=>{
+      const dt=Math.min(0.032,(now-tPrev)/1000); tPrev=now;
+      v+=(-K*x-C*v)*dt; x+=v*dt; draw();
+      if(Math.abs(x)<0.2&&Math.abs(v)<6){ x=0; v=0; draw(); raf=0; return; }
+      raf=requestAnimationFrame(step);
+    };
+    raf=requestAnimationFrame(step);
+  }
   sc.addEventListener('touchstart',e=>{
     if(e.touches.length!==1||document.body.classList.contains('lock')) return;
-    touching=true; active=false; y0=e.touches[0].clientY; clearTimeout(t1); set(0);
+    touching=true; active=false; stop(); x=0; v=0; draw();
+    y0=mY=e.touches[0].clientY; mT=e.timeStamp; mV=0;
   },{passive:true});
   sc.addEventListener('touchmove',e=>{
     if(!touching||e.touches.length!==1) return;
     const y=e.touches[0].clientY, dy=y-y0, top=sc.scrollTop, max=sc.scrollHeight-sc.clientHeight;
     if(!active){
-      if((dy>0&&top<=0)||(dy<0&&top>=max-1)){ active=true; dir=dy>0?1:-1; y0=y; }
+      if((dy>0&&top<=0)||(dy<0&&top>=max-1)){ active=true; dir=dy>0?1:-1; y0=y; mY=y; mT=e.timeStamp; mV=0; x=0; }
       return;
     }
     const d=(y-y0)*dir;
-    if(d<=0){ active=false; set(0); return; }
+    if(d<=0){ active=false; x=0; v=0; draw(); return; }
     if(e.cancelable) e.preventDefault();
-    set(dir*rubber(d));
+    const nx=dir*rubber(d), dt=Math.max(1,e.timeStamp-mT);
+    mV=0.6*mV+0.4*((nx-x)/dt*1000); mT=e.timeStamp;
+    x=nx; draw();
   },{passive:false});
-  const end=()=>{ touching=false; if(active){ active=false; set(0,SPRING); } };
+  const end=e=>{
+    touching=false;
+    if(active){ active=false; v=Math.abs(e.timeStamp-mT)<80?mV:0; spring(); }
+  };
   sc.addEventListener('touchend',end,{passive:true});
   sc.addEventListener('touchcancel',end,{passive:true});
   sc.addEventListener('scroll',()=>{
     const now=performance.now(), top=sc.scrollTop, max=sc.scrollHeight-sc.clientHeight;
-    const dt=Math.max(1,now-lastT), v=(top-lastTop)/dt;
-    if(!touching&&max>0&&Math.abs(lastV)>0.5&&((top<=0&&lastTop>0)||(top>=max-1&&lastTop<max-1))){
-      const kick=Math.min(70,Math.abs(lastV)*28)*(top<=0?1:-1);
-      set(kick,'transform .16s ease-out'); clearTimeout(t1);
-      t1=setTimeout(()=>set(0,SPRING),160);
+    const dt=Math.max(1,now-lastT), vel=(top-lastTop)/dt;   // px/ms
+    if(!touching&&max>0&&now-lastT<64&&Math.abs(lastV)>0.6&&((top<=0&&lastTop>0)||(top>=max-1&&lastTop<max-1))){
+      x=0; v=Math.max(-900,Math.min(900,-lastV*320)); spring();
     }
-    if(Math.abs(v)>0.02) lastV=v;
+    if(Math.abs(vel)>0.02){ lastV=vel; }
     lastTop=top; lastT=now;
   },{passive:true});
 })();
