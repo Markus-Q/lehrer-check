@@ -351,6 +351,8 @@ details p{font-size:13px;margin-top:10px}
 .stampPop{position:fixed;inset:0;z-index:250;display:grid;place-items:center;pointer-events:none}
 .stampPop span{font-family:var(--disp);font-size:clamp(48px,16vw,100px);line-height:1;text-transform:uppercase;letter-spacing:.03em;color:var(--red);border:6px solid var(--red);outline:3px solid var(--red);outline-offset:6px;padding:.08em .28em;transform:rotate(-9deg);animation:stampIn 1.3s var(--ease) both}
 @keyframes stampIn{0%{opacity:0;transform:rotate(-9deg) scale(2)}16%{opacity:.95;transform:rotate(-9deg) scale(1)}80%{opacity:.95;transform:rotate(-9deg) scale(1)}100%{opacity:0;transform:rotate(-9deg) scale(1.03)}}
+.gated .tabbar{display:none}
+.mbtns{display:flex;gap:6px;flex:none}
 @media(max-width:380px){.brand{font-size:20px}.hact{gap:6px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -473,13 +475,17 @@ let NAME_MSG = '';
 const S = {
   teachers:[], ratings:[], lessons:[], A:new Map(),
   tab:'teachers', q:'', subj:'Alle', sort:'overall', cmp:[],
-  cloud:false, mode:'local', ready:false, authed:false, err:'', boss:null,
-  _got:{t:false,r:false,l:false,b:false}
+  cloud:false, mode:'local', ready:false, authed:false, err:'', boss:null, me:null, members:[], askedName:false,
+  _got:{t:false,r:false,l:false,b:false,m:false}
 };
+const unsubs = {data:[], members:null};
 let SHEET = null, FORM = null, FORM_T = null, FORM_L = null, fb = null;
 
 const isBoss = ()=>S.cloud && !!S.boss && S.boss.uid===UID;
 const canManage = ()=>!S.cloud || isBoss();
+const hasAccess = ()=>!S.cloud || isBoss() || S.me?.status==='approved';
+const nameLocked = ()=>!!SHEET && SHEET.type==='name' && !S.cloud && !UNAME;
+const pendingCount = ()=>isBoss()?S.members.filter(m=>m.status==='pending').length:0;
 
 /* ---------- Auswertung ---------- */
 function computeAll(){
@@ -656,8 +662,37 @@ function cloudErr(e){
   if(cs.includes('permission')) return 'Keine Berechtigung. Bitte die Firestore-Regeln prüfen (Status oben rechts → Verbindung).';
   return 'Verbindungsproblem: '+cs;
 }
+const cloudFail = e=>{ S.mode='error'; S.err=cloudErr(e); S.ready=true; onData(); };
+const failData = e=>{ if(hasAccess()) cloudFail(e); };
+function recomputeReady(){
+  if(S.mode==='error') return;
+  const acc=hasAccess();
+  S.ready = !!(S._got.b && S._got.m && (!acc || (S._got.t && S._got.r && S._got.l)));
+}
+function stopData(){
+  unsubs.data.forEach(f=>{ try{ f(); }catch{} }); unsubs.data=[];
+  S.teachers=[]; S.ratings=[]; S.lessons=[]; S._got.t=false; S._got.r=false; S._got.l=false;
+}
+function startData(){
+  const db=fb.db;
+  unsubs.data=[
+    fb.onSnapshot(fb.collection(db,'teachers'),snap=>{ S.teachers=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.t=true; recomputeReady(); onData(); },failData),
+    fb.onSnapshot(fb.collection(db,'ratings'),snap=>{ S.ratings=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.r=true; recomputeReady(); onData(); },failData),
+    fb.onSnapshot(fb.collection(db,'lessons'),snap=>{ S.lessons=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.l=true; recomputeReady(); onData(); },failData)
+  ];
+}
+function syncAccess(){
+  const acc=isBoss()||S.me?.status==='approved';
+  if(acc&&!unsubs.data.length) startData();
+  if(!acc&&unsubs.data.length) stopData();
+  if(isBoss()&&!unsubs.members){
+    unsubs.members=fb.onSnapshot(fb.collection(fb.db,'members'),snap=>{ S.members=snap.docs.map(d=>({id:d.id,...d.data()})); onData(); },failData);
+  } else if(!isBoss()&&unsubs.members){
+    unsubs.members(); unsubs.members=null; S.members=[];
+  }
+}
 async function startCloud(cfg){
-  S.mode='cloud'; S.ready=false; S.authed=false; S._got={t:false,r:false,l:false,b:false};
+  S.mode='cloud'; S.ready=false; S.authed=false; S._got={t:false,r:false,l:false,b:false,m:false};
   onData();
   setTimeout(()=>{ if(!S.ready && S.cloud){ S.mode='error'; S.err='Keine Antwort von Firebase. Offline oder Konfiguration falsch?'; S.ready=true; onData(); } },12000);
   try{
@@ -669,17 +704,16 @@ async function startCloud(cfg){
     UID=cred.user.uid; S.authed=true;
     const db=fsM.initializeFirestore(app,{experimentalAutoDetectLongPolling:true});
     fb={db,...fsM};
-    const gotData=()=>{
-      if(S._got.t&&S._got.r&&S._got.l&&S._got.b){
-        const first=!S.ready; S.ready=true; S.mode='cloud'; S.err=''; onData();
-        if(first) ensureBoss();
-      } else onData();
-    };
-    const fail=e=>{ S.mode='error'; S.err=cloudErr(e); S.ready=true; onData(); };
-    fsM.onSnapshot(fsM.collection(db,'teachers'),snap=>{ S.teachers=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.t=true; gotData(); },fail);
-    fsM.onSnapshot(fsM.collection(db,'ratings'),snap=>{ S.ratings=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.r=true; gotData(); },fail);
-    fsM.onSnapshot(fsM.collection(db,'lessons'),snap=>{ S.lessons=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.l=true; gotData(); },fail);
-    fsM.onSnapshot(fsM.doc(db,'meta','boss'),snap=>{ S.boss=snap.exists()?snap.data():null; S._got.b=true; gotData(); },fail);
+    fsM.onSnapshot(fsM.doc(db,'meta','boss'),snap=>{
+      S.boss=snap.exists()?snap.data():null; S._got.b=true;
+      if(isBoss()&&UNAME!=='BOSS'){ UNAME='BOSS'; ls.set('lc_name','BOSS'); }
+      syncAccess(); recomputeReady(); onData();
+    },cloudFail);
+    fsM.onSnapshot(fsM.doc(db,'members',UID),snap=>{
+      S.me=snap.exists()?snap.data():null; S._got.m=true;
+      if(S.me&&S.me.name&&!isBoss()&&UNAME!==S.me.name){ UNAME=S.me.name; ls.set('lc_name',UNAME); }
+      syncAccess(); recomputeReady(); onData();
+    },cloudFail);
   }catch(e){
     S.mode='error'; S.err=cloudErr(e); S.ready=true; onData();
   }
@@ -691,19 +725,16 @@ async function claimBoss(){
   if(!fb) throw new Error('Keine Verbindung zu Firebase');
   await withTimeout(fb.setDoc(fb.doc(fb.db,'meta','boss'),{uid:UID,name:'BOSS',createdAt:Date.now()}));
 }
-async function ensureBoss(){
-  if(!S.cloud||!S.ready||!UNAME) return;
-  if(UNAME.trim().toLowerCase()!=='boss') return;
-  if(!S.boss){
-    try{ await claimBoss(); UNAME='BOSS'; ls.set('lc_name','BOSS'); toast('Du bist jetzt BOSS'); }catch{}
-  } else if(S.boss.uid!==UID){
-    UNAME=''; ls.del('lc_name'); NAME_MSG='Der Name BOSS ist schon vergeben. Bitte wähle einen anderen.'; openSheet('name');
-  }
-}
 
 /* ---------- API ---------- */
 const needFb=()=>{ if(!fb) throw new Error('Keine Verbindung zu Firebase'); };
 const api={
+  async requestAccess(name){
+    needFb(); await withTimeout(fb.setDoc(fb.doc(fb.db,'members',UID),{uid:UID,name,status:'pending',createdAt:Date.now()}));
+  },
+  async withdrawAccess(){ needFb(); await withTimeout(fb.deleteDoc(fb.doc(fb.db,'members',UID))); },
+  async setMember(uid,status){ needFb(); await withTimeout(fb.updateDoc(fb.doc(fb.db,'members',uid),{status,decidedAt:Date.now()})); },
+  async deleteMember(uid){ needFb(); await withTimeout(fb.deleteDoc(fb.doc(fb.db,'members',uid))); },
   async addTeacher(d){
     const t={name:d.name,subjects:d.subjects,createdAt:Date.now(),createdBy:UID};
     if(S.cloud){ needFb(); const ref=await withTimeout(fb.addDoc(fb.collection(fb.db,'teachers'),t)); return ref.id; }
@@ -735,7 +766,7 @@ const api={
   },
   async saveRating(tid,d){
     const id=tid+'_'+UID, prev=S.ratings.find(r=>r.id===id), now=Date.now();
-    const r={teacherId:tid,userId:UID,userName:UNAME,tags:d.tags||[],rec:(typeof d.rec==='boolean')?d.rec:null,comment:d.comment||'',subject:d.subject||'',createdAt:prev?.createdAt||now,updatedAt:now};
+    const r={teacherId:tid,userId:UID,userName:UNAME,tags:d.tags||[],rec:(typeof d.rec==='boolean')?d.rec:null,subject:d.subject||'',createdAt:prev?.createdAt||now,updatedAt:now};
     CRIT.forEach(c=>{ r[c.key]=d[c.key]; });
     if(S.cloud){ needFb(); await withTimeout(fb.setDoc(fb.doc(fb.db,'ratings',id),r)); return; }
     const i=S.ratings.findIndex(x=>x.id===id); const row={id,...r};
@@ -775,9 +806,6 @@ function loadDemo(){
     {n:'Herr Wagner',s:['Informatik'],p:[3.0,3.4,4.1,3.2,3.2,3.8,3.6],v:2.2,tg:['streng','fordernd','puenktlich']}
   ];
   const names=['LM','JS','AK','TB','NH','PW','SK','MR','EF','DL','CB','FG','OH','VK'];
-  const good=['Erklärt echt super und hat immer Geduld.','Man merkt, dass der Unterricht Spaß macht.','Sehr fair bei Tests und hilfsbereit.','Nimmt sich Zeit, wenn man was nicht versteht.'];
-  const mid=['Okay, aber manchmal etwas zu schnell.','Solider Unterricht, Tempo könnte angepasster sein.','Meistens fair, kommt aber auf die Tagesform an.'];
-  const bad=['Sehr straffes Tempo, kaum Zeit für Fragen.','Benotung wirkt manchmal willkürlich.','Schwer, dem Unterricht zu folgen.'];
   const now=Date.now(), day=864e5;
   T.forEach(def=>{
     const id=rid();
@@ -789,7 +817,6 @@ function loadDemo(){
       const r={id:id+'_demo-'+u,teacherId:id,userId:'demo-'+u,userName:u,demo:true};
       CRIT.forEach((c,i)=>{ r[c.key]=val(def.p[i]); });
       const o=ovr(r);
-      r.comment=rnd()<.45?(o>=4?good:o>=3?mid:bad)[Math.floor(rnd()*3)]:'';
       r.subject=(def.s.length>1&&rnd()>.4)?def.s[Math.floor(rnd()*def.s.length)]:'';
       const tgs=[]; def.tg.forEach(t=>{ if(rnd()<.4) tgs.push(t); }); r.tags=tgs.slice(0,TAG_MAX);
       r.rec=rnd()<.85?(rnd()<(o-1.5)/3.2):null;
@@ -829,7 +856,7 @@ function teacherCard(a,i){
 function viewTeachers(){
   const opts=[['overall','Beste Gesamtnote'],...CRIT.map(c=>[c.key,`${c.no} ${c.name}`]),['rec','Weiterempfehlung'],['lessons','Stunden-Punkte'],['n','Meiste Bewertungen'],['name','A bis Z']];
   return `<h2 class="vt">Zeugnis<span class="l2">für <em>Lehrer${UL}</em></span></h2>
-  <p class="lede">Sieben Aufgaben pro Lehrer: Kästchen ankreuzen, Kommentar dazu, fertig. Pro Schultag gibt es zusätzlich Stunden-Punkte von −10 bis +10.</p>
+  <p class="lede">Sieben Aufgaben pro Lehrer: Kästchen ankreuzen, fertig. Pro Schultag gibt es zusätzlich Stunden-Punkte von −10 bis +10.</p>
   <div class="toolbar">
     <label class="search"><span class="lab">Suche</span><input id="q" type="search" placeholder="Name oder Fach" value="${esc(S.q)}" autocomplete="off"></label>
     <select id="sort" class="sel" aria-label="Sortierung">${opts.map(([v,l])=>`<option value="${v}" ${S.sort===v?'selected':''}>${l}</option>`).join('')}</select>
@@ -868,7 +895,7 @@ function renderList(anim=true){
         el.innerHTML=emptyBlock('Noch leer.','Der erste Lehrer fehlt noch. Danach kann die Klasse ankreuzen.',
           `<div class="row2"><button class="btn primary" data-act="add-teacher">+ Lehrer hinzufügen</button>${!S.cloud?'<button class="btn" data-act="demo-load">Demo-Daten laden</button>':''}</div>`);
       } else {
-        el.innerHTML=emptyBlock('Noch leer.', S.boss?'Der BOSS legt die Lehrer an. Schau später noch mal vorbei.':'Es gibt noch keinen BOSS. Wer sich beim Start „BOSS“ nennt, legt die Lehrer an (Ich, dann Ändern).');
+        el.innerHTML=emptyBlock('Noch leer.', S.boss?'Der BOSS legt die Lehrer an. Schau später noch mal vorbei.':'Es gibt noch keinen BOSS. Wer sich als Erster „BOSS“ nennt, legt die Lehrer an.');
       }
     } else {
       el.innerHTML=emptyBlock('Nichts gefunden.','Probier eine andere Suche oder einen anderen Fach-Filter.');
@@ -941,7 +968,6 @@ function viewStats(){
   const mood=all.filter(a=>a.ln>=3).sort((a,b)=>b.lavg-a.lavg)[0];
   if(mood) facts.push(['Stimmungsmacher',`${esc(mood.t.name)} (Ø ${fmtPts(mood.lavg,1)} Stunden-Punkte)`]);
   if(tagList[0]) facts.push(['Meistvergebener Tag',`${esc(tagLabel(tagList[0][0]))} (${tagList[0][1]}×)`]);
-  facts.push(['Kommentare',`${rs.filter(r=>(r.comment||'').trim()).length} Kommentare insgesamt`]);
 
   return `${title('Auswertung')}
   <p class="lede">Alles, was die Klasse bisher angekreuzt hat.</p>
@@ -996,6 +1022,19 @@ function viewCompare(){
   return `${title('Vergleich')}<div class="chips" style="margin:16px 0 8px">${chips}</div>${body}`;
 }
 
+function memberSection(){
+  if(!isBoss()) return '';
+  const ms=[...S.members];
+  const pend=ms.filter(m=>m.status==='pending').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  const appr=ms.filter(m=>m.status==='approved').sort((a,b)=>String(a.name).localeCompare(String(b.name),'de'));
+  const rej=ms.filter(m=>m.status==='rejected').sort((a,b)=>String(a.name).localeCompare(String(b.name),'de'));
+  const cnt=new Map(); ms.forEach(m=>{ const k=String(m.name||'').toLowerCase(); cnt.set(k,(cnt.get(k)||0)+1); });
+  const row=(m,btns)=>`<div class="lrow static">${avatar(m.name||'?')}<div class="grow"><b>${esc(m.name)}${cnt.get(String(m.name||'').toLowerCase())>1?' <span class="tag">doppelter Name</span>':''}</b><small>${fmtDate(m.createdAt||0)}</small></div><span class="mbtns">${btns}</span></div>`;
+  const b=(act,id,l)=>`<button class="qbtn" data-act="${act}" data-id="${esc(id)}">${l}</button>`;
+  return `<section class="blk"><h3>Zugangsanfragen (${pend.length})</h3>${pend.length?pend.map(m=>row(m,b('mem-ok',m.id,'Zulassen')+b('mem-no',m.id,'Ablehnen'))).join(''):'<p class="note">Keine offenen Anfragen.</p>'}</section>
+  ${appr.length?`<section class="blk"><h3>Zugelassen (${appr.length})</h3>${appr.map(m=>row(m,b('mem-revoke',m.id,'Entziehen'))).join('')}</section>`:''}
+  ${rej.length?`<section class="blk"><h3>Abgelehnt (${rej.length})</h3>${rej.map(m=>row(m,b('mem-ok',m.id,'Zulassen')+b('mem-del',m.id,'Löschen'))).join('')}</section>`:''}`;
+}
 function viewMe(){
   const mine=S.ratings.filter(r=>r.userId===UID&&S.A.has(r.teacherId)).sort((x,y)=>ts(y)-ts(x));
   const done=new Set(mine.map(r=>r.teacherId));
@@ -1006,13 +1045,14 @@ function viewMe(){
   let tag='';
   if(mine.length>=2&&clsAvg!=null){ const d=myAvg-clsAvg; tag=d>=.4?'Du bewertest eher gnädig.':d<=-.4?'Du bewertest eher streng.':'Du bewertest ausgewogen.'; }
   return `${title('Mein Heft')}
-  <div class="namefield"><span class="lab">Name</span><div class="nf-v">${esc(UNAME||'unbekannt')}${isBoss()?CROWN:''}</div><button class="btn sm" data-act="rename">Ändern</button></div>
+  <div class="namefield"><span class="lab">Name</span><div class="nf-v">${esc(UNAME||'unbekannt')}${isBoss()?CROWN:''}</div>${!S.cloud?'<button class="btn sm" data-act="rename">Ändern</button>':''}</div>
   <p class="lede">${isBoss()?'Du bist BOSS und verwaltest die Lehrerliste.':(tag||'Bewerte mindestens zwei Lehrer, dann steht hier, ob du eher streng oder gnädig bist.')}</p>
   <div class="kpi3" style="border-top:2px solid var(--ink);margin-top:14px">
     <div class="kpi"><b>${mine.length}</b><span>Bewertungen</span></div>
     <div class="kpi"><b>${myLessons.length}</b><span>Stunden</span></div>
     <div class="kpi"><b>${fmt(myAvg)}</b><span>Ø von dir</span></div>
   </div>
+  ${memberSection()}
   ${todo.length?`<section class="blk"><h3>Noch nicht bewertet (${todo.length})</h3>${todo.map(a=>`<div class="lrow" data-act="rate" data-id="${esc(a.t.id)}">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${esc((a.t.subjects||[]).join(', '))}</small></div><span class="cta">Bewerten</span></div>`).join('')}</section>`:''}
   ${mine.length?`<section class="blk"><h3>Meine Bewertungen</h3>${mine.map(r=>{ const a=S.A.get(r.teacherId); return `<div class="lrow" data-act="rate" data-id="${esc(a.t.id)}">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDate(ts(r))}${r.subject?' · '+esc(r.subject):''}</small></div>${boxes(ovr(r),'xs')}<span class="pts" style="font-size:20px">${fmt(ovr(r))}</span></div>`; }).join('')}</section>`:''}
   ${myLessons.length?`<section class="blk"><h3>Meine Stunden (zuletzt)</h3>${myLessons.slice(0,8).map(l=>{ const a=S.A.get(l.teacherId); return `<div class="lrow static">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDay(l.day)}</small></div><span class="pts" style="color:${lessonColor(l.points)}">${fmtPts(l.points)}</span></div>`; }).join('')}</section>`:''}
@@ -1031,7 +1071,6 @@ const sheetHead=(t,act='close')=>`<div class="sh">${t?`<h2>${t}</h2>`:''}<button
 function detailHTML(tid){
   const a=S.A.get(tid); if(!a) return sheetHead('Nicht gefunden');
   const t=a.t, mine=myRating(tid), manage=canManage();
-  const comments=a.rs.filter(r=>(r.comment||'').trim()).sort((x,y)=>ts(y)-ts(x));
   const bd=badgesFor(a);
   const subs=(t.subjects||[]).map(s=>{ const rs=a.rs.filter(r=>r.subject===s); return rs.length?{s,n:rs.length,v:mean(rs.map(ovr))}:null; }).filter(Boolean);
   const tagList=[...a.tags].sort((x,y)=>y[1]-x[1]).slice(0,8);
@@ -1055,7 +1094,7 @@ function detailHTML(tid){
     <div class="d-sec"><h4>Verteilung der Gesamtnoten</h4>${columns(a.dist.map((v,i)=>({label:(i+1)+'/5',value:v})),{cls:'sm'})}</div>
     ${a.n>=3?`<div class="d-sec"><h4>Entwicklung (laufender Schnitt)</h4>${trendSVG(a.rs)}</div>`:''}
     ${subs.length>1?`<div class="d-sec"><h4>Nach Fach</h4>${subs.map(s=>hbar(esc(s.s),s.v,5,fmt(s.v))).join('')}</div>`:''}
-    ${comments.length?`<div class="d-sec"><h4>Randbemerkungen (${comments.length})</h4>${comments.map(r=>`<div class="cm ${r.userId===UID?'mine':''}"><div class="cm-h"><b>${esc(r.userName||'?')}${crown(r.userId)}</b><span>${fmtDate(ts(r))}</span>${r.subject?`<span class="tag">${esc(r.subject)}</span>`:''}${boxes(ovr(r),'xs')}</div><p>${esc(r.comment)}</p></div>`).join('')}</div>`:''}`;
+    `;
   }
   return `${sheetHead('')}
   <div class="d-hero">${avatar(t.name,'lg')}<div><h2 class="d-name">${esc(t.name)}</h2><div class="chips">${(t.subjects||[]).map(s=>`<span class="chip sm">${esc(s)}</span>`).join('')}</div></div></div>
@@ -1069,7 +1108,7 @@ function rateHTML(tid){
   const t=a.t, F=FORM, mine=myRating(tid);
   const subs=t.subjects||[];
   return `${sheetHead(`${esc(t.name)} bewerten`,'rate-cancel')}
-  <p class="sub">Tippe pro Aufgabe auf das Kästchen. Deine Bewertung erscheint mit deinem Namen („${esc(UNAME)}“).</p>
+  <p class="sub">Tippe pro Aufgabe auf das Kästchen. Deine Bewertung wird mit deinem Namen („${esc(UNAME)}“) gespeichert.</p>
   ${CRIT.map(c=>`<div class="rate-row">
     <div class="rr-head"><b><span class="no">${c.no}</span>${esc(c.name)}</b><span class="rr-txt" id="rt-${c.key}">${LABELS[F[c.key]]||'offen'}</span></div>
     <p class="hint">${esc(c.hint)}</p>
@@ -1080,9 +1119,6 @@ function rateHTML(tid){
   <label class="lbl">Tags (optional, höchstens ${TAG_MAX})</label>
   <div class="chips wrapc">${TAGS.map(tg=>`<button type="button" class="chip ${F.tags.includes(tg.id)?'on':''}" data-act="tag" data-id="${tg.id}">${esc(tg.label)}</button>`).join('')}</div>
   ${subs.length>1?`<label class="lbl">Für welches Fach? (optional)</label><select id="subjectSel" class="inp"><option value="">Allgemein</option>${subs.map(s=>`<option value="${esc(s)}" ${F.subject===s?'selected':''}>${esc(s)}</option>`).join('')}</select>`:''}
-  <label class="lbl">Randbemerkung (optional)</label>
-  <textarea id="comment" class="inp" maxlength="300" placeholder="Was war gut? Was könnte besser sein? Bleib fair und sachlich.">${esc(F.comment)}</textarea>
-  <div class="cc"><span id="ccount">${(F.comment||'').length}</span>/300</div>
   ${mine?'<div class="mgmt"><button class="lnk danger" style="margin:0" data-act="del-rating">Meine Bewertung löschen</button></div>':''}
   <div class="d-actions"><button class="btn primary" id="saveBtn" data-act="save-rating" ${CRIT.every(c=>F[c.key])?'':'disabled'}>Speichern</button></div>`;
 }
@@ -1115,7 +1151,7 @@ function lessonBack(){
 function teacherFormHTML(){
   const e=!!FORM_T.id;
   return `${sheetHead(e?'Lehrer bearbeiten':'Neuer Lehrer')}
-  <label class="lbl">Name</label>
+  <label class="lbl">Name (nur Herr/Frau und Nachname)</label>
   <input id="tName" class="inp" maxlength="60" placeholder="z. B. Herr Müller" value="${esc(FORM_T.name)}" autocomplete="off">
   <label class="lbl">Fächer</label>
   <div class="row"><input id="tSubj" class="inp" maxlength="30" placeholder="Fach eingeben, dann Enter" autocomplete="off"><button class="btn" data-act="subj-add">+</button></div>
@@ -1138,11 +1174,18 @@ function addSubject(raw){
   renderTChips();
 }
 
+function requestHTML(){
+  return `<h2 class="sh" style="font-family:var(--disp);font-weight:400;font-size:clamp(34px,10vw,52px);line-height:1;color:var(--ink);margin-bottom:8px;display:block">Zugang anfragen.</h2>
+  <p class="sub">Diese Seite ist nur für unsere Klasse. Gib deinen Namen oder dein Kürzel ein (z. B. „LM“) und schick die Anfrage ab. Sobald der BOSS dich zulässt, kannst du loslegen. <b>Der Name lässt sich danach nicht mehr ändern.</b>${S.boss?'':' Der Name „BOSS“ ist für den Verwalter reserviert: Wer ihn zuerst nimmt, wird BOSS.'}</p>
+  ${NAME_MSG?`<p class="sub" style="color:var(--red);font-weight:700">${esc(NAME_MSG)}</p>`:''}
+  <input id="nameIn" class="inp" maxlength="20" placeholder="Name oder Kürzel" value="${esc(UNAME)}" autocomplete="off">
+  <div class="actions"><button class="btn ghost" data-act="close">Später</button><button class="btn primary" data-act="save-name">Anfrage senden</button></div>`;
+}
 function nameHTML(){
+  if(S.cloud) return requestHTML();
   const can=!!UNAME;
   return `${can?sheetHead('Anzeigename'):'<h2 class="sh" style="font-family:var(--disp);font-weight:400;font-size:clamp(36px,11vw,56px);line-height:1;color:var(--ink);margin-bottom:8px;display:block">Willkommen.</h2>'}
-  <p class="sub">Wie sollen deine Bewertungen angezeigt werden? Nimm deinen Namen oder ein Kürzel, z. B. „LM“. Die Klasse sieht das bei deinen Randbemerkungen.${S.cloud?' Der Name „BOSS“ ist für den Verwalter der Lehrerliste reserviert: Wer ihn zuerst nimmt, wird BOSS.':''}</p>
-  ${NAME_MSG?`<p class="sub" style="color:var(--red);font-weight:700">${esc(NAME_MSG)}</p>`:''}
+  <p class="sub">Wie sollen deine Bewertungen gespeichert werden? Nimm deinen Namen oder ein Kürzel, z. B. „LM“.</p>
   <input id="nameIn" class="inp" maxlength="20" placeholder="Name oder Kürzel" value="${esc(UNAME)}" autocomplete="off">
   <div class="actions">${can?'<button class="btn ghost" data-act="close">Abbrechen</button>':''}<button class="btn primary" data-act="save-name">${can?'Speichern':'Los geht’s'}</button></div>`;
 }
@@ -1153,15 +1196,21 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
     function bossPath() { return /databases/$(database)/documents/meta/boss; }
+    function memberPath(uid) { return /databases/$(database)/documents/members/$(uid); }
     function isBoss() {
       return signedIn() && exists(bossPath())
              && get(bossPath()).data.uid == request.auth.uid;
     }
-    function stars(v) { return v is number && v >= 1 && v <= 5; }
-    function nameOk(d) {
-      return d.userName is string && d.userName.size() >= 2 && d.userName.size() <= 20
-             && (d.userName.lower() != 'boss' || isBoss());
+    function isApproved() {
+      return signedIn() && exists(memberPath(request.auth.uid))
+             && get(memberPath(request.auth.uid)).data.status == 'approved';
     }
+    function isMember() { return isBoss() || isApproved(); }
+    function myName() {
+      return isBoss() ? 'BOSS' : get(memberPath(request.auth.uid)).data.name;
+    }
+    function nameOk(d) { return d.userName is string && d.userName == myName(); }
+    function stars(v) { return v is number && v >= 1 && v <= 5; }
 
     // Wer zuerst "BOSS" claimt, bleibt BOSS (nur einmal anlegbar)
     match /meta/boss {
@@ -1172,20 +1221,39 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Zugangsanfragen: jeder darf eine eigene stellen, nur der BOSS entscheidet
+    match /members/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isBoss());
+      allow list: if isBoss();
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.uid == uid
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() >= 2
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.name.lower() != 'boss'
+                    && request.resource.data.keys().hasOnly(['uid','name','status','createdAt']);
+      allow update: if isBoss();
+      allow delete: if isBoss()
+                    || (signedIn() && request.auth.uid == uid && resource.data.status == 'pending');
+    }
+
     // Lehrer: nur der BOSS darf anlegen, ändern, löschen
     match /teachers/{id} {
-      allow read: if signedIn();
+      allow read: if isMember();
       allow create, update: if isBoss()
                     && request.resource.data.name is string
                     && request.resource.data.name.size() <= 60
-                    && request.resource.data.subjects is list;
+                    && request.resource.data.subjects is list
+                    && request.resource.data.subjects.size() <= 10
+                    && request.resource.data.keys().hasOnly(['name','subjects','createdAt','createdBy']);
       allow delete: if isBoss();
     }
 
-    // Bewertungen: jeder nur seine eigene
+    // Bewertungen: nur zugelassene Konten, jeder nur seine eigene
     match /ratings/{id} {
-      allow read: if signedIn();
-      allow create, update: if signedIn()
+      allow read: if isMember();
+      allow create, update: if isMember()
                     && request.resource.data.userId == request.auth.uid
                     && id == request.resource.data.teacherId + '_' + request.auth.uid
                     && nameOk(request.resource.data)
@@ -1193,25 +1261,29 @@ service cloud.firestore {
                     && stars(request.resource.data.b) && stars(request.resource.data.u)
                     && stars(request.resource.data.a) && stars(request.resource.data.p)
                     && stars(request.resource.data.g)
-                    && request.resource.data.comment is string
-                    && request.resource.data.comment.size() <= 300
                     && request.resource.data.tags is list
-                    && request.resource.data.tags.size() <= 4;
-      allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isBoss());
+                    && request.resource.data.tags.size() <= 4
+                    && request.resource.data.tags.hasOnly(['humor','streng','chaos','anschaulich','hausi','locker','schlaf','puenktlich','zeit','fordernd','buch','laut'])
+                    && (request.resource.data.rec == null || request.resource.data.rec is bool)
+                    && request.resource.data.subject is string
+                    && request.resource.data.subject.size() <= 30
+                    && request.resource.data.keys().hasOnly(['teacherId','userId','userName','tags','rec','subject','createdAt','updatedAt','f','h','b','u','a','p','g']);
+      allow delete: if isMember() && (resource.data.userId == request.auth.uid || isBoss());
     }
 
     // Stunden-Punkte: 1 Dokument pro Tag, Lehrer und Person
     match /lessons/{id} {
-      allow read: if signedIn();
-      allow create, update: if signedIn()
+      allow read: if isMember();
+      allow create, update: if isMember()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.day is string
                     && request.resource.data.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
                     && id == request.resource.data.teacherId + '_' + request.auth.uid + '_' + request.resource.data.day
                     && request.resource.data.points is number
                     && request.resource.data.points >= -10 && request.resource.data.points <= 10
-                    && nameOk(request.resource.data);
-      allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isBoss());
+                    && nameOk(request.resource.data)
+                    && request.resource.data.keys().hasOnly(['teacherId','userId','userName','points','day','createdAt','updatedAt']);
+      allow delete: if isMember() && (resource.data.userId == request.auth.uid || isBoss());
     }
   }
 }`;
@@ -1236,7 +1308,7 @@ function settingsHTML(){
     <li>Die Datei online hosten (GitHub Pages, Netlify, Firebase Hosting). Falls die Anmeldung scheitert: unter <b>Authentication → Settings → Authorized domains</b> die Domain der Seite hinzufügen.</li>
     <li><b>Als Erstes selbst die Seite öffnen und dich „BOSS“ nennen</b>, bevor du den Link teilst.</li>
   </ol></details>
-  <details><summary>Firestore-Regeln (mit BOSS-Sperre)</summary><pre class="code">${esc(RULES)}</pre><button class="btn sm" data-act="copy-rules">Regeln kopieren</button></details>
+  <details><summary>Firestore-Regeln (BOSS-Sperre und Freigabe)</summary><pre class="code">${esc(RULES)}</pre><button class="btn sm" data-act="copy-rules">Regeln kopieren</button></details>
   <details><summary>BOSS zurücksetzen oder übertragen</summary><p>Der BOSS-Status hängt an der anonymen Anmeldung deines Browsers. Wenn du die Browserdaten löschst oder das Gerät wechselst, bist du nicht mehr BOSS. Zurücksetzen: in der Firebase-Konsole unter <b>Firestore → Daten → Sammlung „meta“</b> das Dokument <b>„boss“</b> löschen. Danach kann sich wieder jemand „BOSS“ nennen.</p></details>`;
 }
 
@@ -1281,16 +1353,31 @@ function updateMode(){
 }
 function renderBanner(){
   const b=$('#banner');
+  const pn=pendingCount();
+  const meTab=$('#tabbar [data-tab="me"]'); if(meTab) meTab.innerHTML=`<i>4</i>Ich${pn?` (${pn})`:''}`;
   if(S.mode==='error'){ b.hidden=false; b.className='banner err'; b.innerHTML=`${esc(S.err||'Verbindungsproblem')} <button class="lnk" data-act="settings">Einstellungen</button>`; }
   else if(!S.cloud){ b.hidden=false; b.className='banner'; b.innerHTML='Lokaler Modus: Bewertungen bleiben nur auf diesem Gerät. <button class="lnk" data-act="settings">Mit der Klasse verbinden</button>'; }
-  else if(S.ready&&!S.boss){ b.hidden=false; b.className='banner'; b.innerHTML='Noch kein BOSS. Wer sich „BOSS“ nennt, legt die Lehrer an (Ich, dann Ändern).'; }
+  else if(S.ready&&!S.boss){ b.hidden=false; b.className='banner'; b.innerHTML='Noch kein BOSS. Wer sich als Erster „BOSS“ nennt, wird BOSS.'; }
+  else if(pn>0){ b.hidden=false; b.className='banner'; b.innerHTML=`${pn} neue Zugangsanfrage${pn===1?'':'n'}. <button class="lnk" data-act="tab" data-tab="me">Ansehen</button>`; }
   else b.hidden=true;
+}
+function gateHTML(){
+  const me=S.me;
+  if(!me) return `${title('Zugang')}<p class="lede">Diese Seite ist nur für unsere Klasse. Schick eine Anfrage an den BOSS.</p><div class="row2" style="margin-top:16px"><button class="btn primary" data-act="open-request">Zugang anfragen</button></div>`;
+  if(me.status==='pending') return `${title('Warte auf','Freigabe.')}<p class="lede">Deine Anfrage als „${esc(me.name)}“ liegt beim BOSS. Sobald er dich zulässt, öffnet sich die Seite von selbst.</p><div class="row2" style="margin-top:16px"><button class="btn" data-act="withdraw">Anfrage zurückziehen</button></div>`;
+  return `${title('Kein','Zugang.')}<p class="lede">Der BOSS hat deine Anfrage abgelehnt oder den Zugang entzogen. Sprich ihn direkt an, wenn das ein Fehler ist.</p>`;
+}
+function maybeOpenRequest(){
+  if(S.cloud&&S.ready&&S.mode!=='error'&&!hasAccess()&&!S.me&&!S.askedName&&!SHEET){ S.askedName=true; openSheet('name'); }
 }
 function renderMain(anim=true){
   const v=$('#view');
+  const gated=S.cloud&&S.ready&&S.mode!=='error'&&!hasAccess();
+  document.body.classList.toggle('gated',gated);
   $$('#tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
   v.className='view'+(anim?'':' still');
   if(!S.ready){ v.innerHTML=title('Moment …')+emptyBlock('Verbinde.','Die Klassen-Datenbank wird geladen.'); return; }
+  if(gated){ v.innerHTML=gateHTML(); return; }
   const fn={teachers:viewTeachers,stats:viewStats,compare:viewCompare,me:viewMe}[S.tab];
   v.innerHTML=fn();
   if(S.tab==='teachers'){ renderChips(); renderList(anim); }
@@ -1302,6 +1389,7 @@ function refreshMain(){
 function onData(){
   computeAll(); updateMode(); renderBanner(); refreshMain();
   if(SHEET&&SHEET.type==='detail'){ if(S.A.has(SHEET.id)) renderSheet(false,true); else closeSheet(); }
+  maybeOpenRequest();
 }
 
 /* ---------- Aktionen ---------- */
@@ -1309,7 +1397,7 @@ const H={
   tab(el){ S.tab=el.dataset.tab; renderMain(true); window.scrollTo({top:0,behavior:'smooth'}); },
   open(el){ openSheet('detail',el.dataset.id); },
   close(){ closeSheet(); },
-  backdrop(el,e){ if(e.target!==el) return; if(SHEET&&SHEET.type==='name'&&!UNAME) return; closeSheet(); },
+  backdrop(el,e){ if(e.target!==el) return; if(nameLocked()) return; closeSheet(); },
   settings(){ openSheet('settings'); },
   subj(el){ S.subj=el.dataset.s; renderChips(); renderList(true); },
 
@@ -1349,7 +1437,7 @@ const H={
 
   rate(el){
     const tid=el.dataset.id, m=myRating(tid);
-    FORM={tid,tags:Array.isArray(m?.tags)?[...m.tags]:[],rec:typeof m?.rec==='boolean'?m.rec:null,comment:m?.comment||'',subject:m?.subject||''};
+    FORM={tid,tags:Array.isArray(m?.tags)?[...m.tags]:[],rec:typeof m?.rec==='boolean'?m.rec:null,subject:m?.subject||''};
     CRIT.forEach(c=>{ FORM[c.key]=Number(m?.[c.key])||0; });
     openSheet('rate',tid);
   },
@@ -1375,11 +1463,10 @@ const H={
   },
   async 'save-rating'(el){
     if(!CRIT.every(c=>FORM[c.key])) return toast('Bitte alle Aufgaben ankreuzen');
-    FORM.comment=(($('#comment')?.value)||'').trim().slice(0,300);
     FORM.subject=$('#subjectSel')?$('#subjectSel').value:(FORM.subject||'');
     el.disabled=true;
     try{
-      const d={tags:FORM.tags,rec:FORM.rec,comment:FORM.comment,subject:FORM.subject};
+      const d={tags:FORM.tags,rec:FORM.rec,subject:FORM.subject};
       CRIT.forEach(c=>{ d[c.key]=FORM[c.key]; });
       await api.saveRating(FORM.tid,d);
       stampPop('Bewertet');
@@ -1427,24 +1514,40 @@ const H={
     renderMain(true);
   },
 
-  rename(){ NAME_MSG=''; openSheet('name'); },
+  rename(){ if(S.cloud) return toast('Dein Name ist fest.'); NAME_MSG=''; openSheet('name'); },
+  'open-request'(){ NAME_MSG=''; openSheet('name'); },
   async 'save-name'(el){
-    const v=($('#nameIn').value||'').trim().replace(/\s+/g,' ');
+    const v=(($('#nameIn')?.value)||'').trim().replace(/\s+/g,' ');
     if(v.length<2) return toast('Mindestens 2 Zeichen bitte');
-    const isBossName=v.toLowerCase()==='boss';
-    const nm=isBossName?'BOSS':v;
-    if(S.cloud&&isBossName){
-      if(!S.ready||!S.authed||S.mode==='error') return toast('Verbindung wird aufgebaut. Gleich noch mal versuchen.');
-      if(S.boss&&S.boss.uid!==UID) return toast('Der Name BOSS ist schon vergeben');
-      if(!S.boss){
-        if(el) el.disabled=true;
-        try{ await claimBoss(); toast('Du bist jetzt BOSS'); }
-        catch(err){ if(el) el.disabled=false; return toast('BOSS konnte nicht vergeben werden: '+errMsg(err)); }
-      }
+    if(!S.cloud){
+      UNAME=v; ls.set('lc_name',v); NAME_MSG=''; closeSheet(); toast('Hallo '+v);
+      if(S.tab==='me') renderMain(false);
+      return;
     }
-    UNAME=nm; ls.set('lc_name',nm); NAME_MSG=''; closeSheet();
-    if(!(S.cloud&&isBossName)) toast('Hallo '+nm);
-    if(S.tab==='me') renderMain(false);
+    if(!S.ready||!S.authed||S.mode==='error') return toast('Verbindung wird aufgebaut. Gleich noch mal versuchen.');
+    if(isBoss()||S.me){ closeSheet(); return; }
+    const isBossName=v.toLowerCase()==='boss';
+    if(isBossName&&S.boss) return toast('Der Name BOSS ist schon vergeben');
+    if(el) el.disabled=true;
+    try{
+      if(isBossName){ await claimBoss(); UNAME='BOSS'; ls.set('lc_name','BOSS'); closeSheet(); toast('Du bist jetzt BOSS'); }
+      else { await api.requestAccess(v); UNAME=v; ls.set('lc_name',v); closeSheet(); toast('Anfrage gesendet'); }
+    }catch(err){ if(el) el.disabled=false; toast('Das hat nicht geklappt: '+errMsg(err)); }
+  },
+  async withdraw(){
+    if(!confirm('Anfrage zurückziehen?')) return;
+    try{ await api.withdrawAccess(); S.askedName=false; toast('Anfrage zurückgezogen'); }
+    catch(err){ toast('Das hat nicht geklappt: '+errMsg(err)); }
+  },
+  async 'mem-ok'(el){ try{ await api.setMember(el.dataset.id,'approved'); toast('Zugelassen'); }catch(err){ toast('Das hat nicht geklappt: '+errMsg(err)); } },
+  async 'mem-no'(el){ try{ await api.setMember(el.dataset.id,'rejected'); toast('Abgelehnt'); }catch(err){ toast('Das hat nicht geklappt: '+errMsg(err)); } },
+  async 'mem-revoke'(el){
+    if(!confirm('Zugang wirklich entziehen?')) return;
+    try{ await api.setMember(el.dataset.id,'rejected'); toast('Zugang entzogen'); }catch(err){ toast('Das hat nicht geklappt: '+errMsg(err)); }
+  },
+  async 'mem-del'(el){
+    if(!confirm('Eintrag löschen? Die Person kann dann neu anfragen.')) return;
+    try{ await api.deleteMember(el.dataset.id); toast('Eintrag gelöscht'); }catch(err){ toast('Das hat nicht geklappt: '+errMsg(err)); }
   },
 
   'save-cfg'(){
@@ -1456,17 +1559,17 @@ const H={
   async 'copy-rules'(){ try{ await navigator.clipboard.writeText(RULES); toast('Regeln kopiert'); }catch{ toast('Kopieren nicht möglich. Bitte manuell markieren.'); } },
 
   export(){
-    const rows=[['Lehrer','Fach',...CRIT.map(c=>c.name),'Gesamt','Tags','Weiterempfehlung','Kommentar','Von','Datum']];
+    const rows=[['Lehrer','Fach',...CRIT.map(c=>c.name),'Gesamt','Tags','Weiterempfehlung',...(isBoss()?['Von']:[]),'Datum']];
     S.ratings.forEach(r=>{
       const a=S.A.get(r.teacherId); if(!a) return;
-      rows.push([a.t.name,r.subject||'',...CRIT.map(c=>r[c.key]??''),fmt(ovr(r),2),(r.tags||[]).map(tagLabel).join(' | '),typeof r.rec==='boolean'?(r.rec?'ja':'nein'):'',r.comment||'',r.userName||'',new Date(ts(r)).toISOString().slice(0,10)]);
+      rows.push([a.t.name,r.subject||'',...CRIT.map(c=>r[c.key]??''),fmt(ovr(r),2),(r.tags||[]).map(tagLabel).join(' | '),typeof r.rec==='boolean'?(r.rec?'ja':'nein'):'',...(isBoss()?[r.userName||'']:[]),new Date(ts(r)).toISOString().slice(0,10)]);
     });
     if(rows.length<2) return toast('Noch keine Bewertungen zum Exportieren');
     download('lehrer-bewertungen.csv',rows);
   },
   'export-lessons'(){
-    const rows=[['Lehrer','Datum','Punkte','Von']];
-    S.lessons.forEach(l=>{ const a=S.A.get(l.teacherId); if(!a) return; rows.push([a.t.name,l.day,l.points,l.userName||'']); });
+    const rows=[['Lehrer','Datum','Punkte',...(isBoss()?['Von']:[])]];
+    S.lessons.forEach(l=>{ const a=S.A.get(l.teacherId); if(!a) return; rows.push([a.t.name,l.day,l.points,...(isBoss()?[l.userName||'']:[])]); });
     if(rows.length<2) return toast('Noch keine Stunden zum Exportieren');
     download('lehrer-stunden.csv',rows);
   },
@@ -1493,7 +1596,6 @@ document.addEventListener('click',e=>{
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='q'){ S.q=t.value; renderList(false); }
-  else if(t.id==='comment'&&FORM){ FORM.comment=t.value; const c=$('#ccount'); if(c) c.textContent=t.value.length; }
   else if(t.id==='lRange'&&FORM_L){ FORM_L.points=parseInt(t.value,10)||0; updateLessonUI(); }
 });
 document.addEventListener('change',e=>{
@@ -1502,7 +1604,7 @@ document.addEventListener('change',e=>{
   else if(t.id==='subjectSel'&&FORM){ FORM.subject=t.value; }
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&SHEET&&!(SHEET.type==='name'&&!UNAME)){ closeSheet(); return; }
+  if(e.key==='Escape'&&SHEET&&!nameLocked()){ closeSheet(); return; }
   if(e.key==='Enter'&&e.target.id==='nameIn'){ e.preventDefault(); H['save-name'](null); }
   if(e.target.id==='tSubj'&&(e.key==='Enter'||e.key===',')){ e.preventDefault(); H['subj-add'](); }
 });
@@ -1513,7 +1615,7 @@ document.addEventListener('keydown',e=>{
   S.cloud=!!cfg; S.mode=cfg?'cloud':'local';
   computeAll(); updateMode(); renderBanner(); renderMain(true);
   if(cfg) startCloud(cfg); else startLocal();
-  if(!UNAME) openSheet('name');
+  if(!S.cloud&&!UNAME) openSheet('name');
 })();
 </script>
 </body>
