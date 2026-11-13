@@ -1514,8 +1514,13 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ---------- Start ---------- */
+/* Glas-Design: Randdicke = genau 1 Geräte-Pixel (1 / Pixeldichte), also das Dünnste, was die Anzeige zeichnen kann.
+   Wird bei Zoom oder Fenstergröße neu berechnet. Ohne dieses Skript gilt der Wert --g-line aus glass.css. */
+function setHairline(){ document.documentElement.style.setProperty('--g-line',(1/(window.devicePixelRatio||1)).toFixed(3)+'px'); }
+window.addEventListener('resize',setHairline);
+
 (function init(){
-  applyTheme();
+  applyTheme(); setHairline();
   const cfg=getCfg();
   S.cloud=!!cfg; S.mode=cfg?'cloud':'local';
   computeAll(); updateMode(); renderBanner(); renderMain(true);

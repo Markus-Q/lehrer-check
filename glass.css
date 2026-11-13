@@ -16,7 +16,7 @@ html[data-design=glass]{
   --disp:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Roboto,sans-serif;
   --mono:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Roboto,sans-serif;
   --r:22px;
-  --g-line:.5px;   /* Dicke des Glasrands. Dünner als 1 Geräte-Pixel geht nicht: .5px sieht auf Handys (2- bis 3-fache Auflösung) wie ein Haarstrich aus, am PC bleibt es 1px */
+  --g-line:.5px;   /* Dicke des Glasrands. app.js überschreibt das mit genau 1 Geräte-Pixel (1 / Pixeldichte); dieser Wert gilt nur als Ersatz */
   scrollbar-color:rgba(var(--ink-rgb),.4) transparent;
 }
 html[data-design=glass][data-theme=dark]{
