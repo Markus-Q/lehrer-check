@@ -2,7 +2,6 @@
    KONFIGURATION
    Optional: Firebase-Config hier fest eintragen, z. B.
    const FIREBASE_CONFIG = { apiKey:"…", authDomain:"…", projectId:"…", appId:"…" };
-   Alternativ in der App: Status oben rechts → Verbindung → Config einfügen.
    ============================================================ */
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCG91gVFcNerMhDUbiCyQh8VBxN1tnljnA",
@@ -290,7 +289,7 @@ function cloudErr(e){
   const cs=String(c);
   if(cs.includes('operation-not-allowed')) return 'Anonyme Anmeldung ist in Firebase noch nicht aktiviert (Authentication → Sign-in method → Anonymous).';
   if(cs.includes('unauthorized-domain')) return 'Diese Domain ist in Firebase nicht freigegeben (Authentication → Settings → Authorized domains).';
-  if(cs.includes('permission')) return 'Keine Berechtigung. Bitte die Firestore-Regeln prüfen (Status oben rechts → Verbindung).';
+  if(cs.includes('permission')) return 'Keine Berechtigung. Die Firestore-Regeln sind vermutlich nicht aktuell.';
   return 'Verbindungsproblem: '+cs;
 }
 const cloudFail = e=>{ S.mode='error'; S.err=cloudErr(e); S.ready=true; onData(); };
@@ -747,7 +746,7 @@ function viewMe(){
     <button class="btn" data-act="export">Bewertungen als CSV</button>
     <button class="btn" data-act="export-lessons">Stunden als CSV</button>
     <button class="btn" data-act="share">Link teilen</button>
-    <button class="btn" data-act="settings">Verbindung</button>
+    ${isBoss()?'<button class="btn" data-act="copy-rules">Firestore-Regeln kopieren</button>':''}
     ${!S.cloud?(S.teachers.some(t=>t.demo)?'<button class="btn danger" data-act="demo-clear">Demo-Daten entfernen</button>':'<button class="btn" data-act="demo-load">Demo-Daten laden</button>'):''}
   </div></section>`;
 }
@@ -1145,31 +1144,6 @@ function legalHTML(doc){
     lastTop=top;
   },{passive:true,capture:true});
 })();
-function settingsHTML(){
-  const cfg=getCfg();
-  const status=!S.cloud?'Lokaler Modus. Daten bleiben nur auf diesem Gerät, jeder darf Lehrer verwalten.'
-    :S.mode==='error'?`Achtung: ${esc(S.err)}`:`Live verbunden mit <b>${esc(cfg?.projectId||'')}</b>.`;
-  const boss=(!S.cloud||!S.ready||S.mode==='error')?'':S.boss?(S.boss.uid===UID?'<br>Du bist BOSS und verwaltest die Lehrer.':'<br>Der BOSS ist vergeben. Nur er verwaltet die Lehrer.'):'<br>Noch kein BOSS. Wer sich beim Start „BOSS“ nennt, wird BOSS.';
-  return `${sheetHead('Verbindung')}
-  <p class="sub">${status}${boss}</p>
-  ${FIREBASE_CONFIG?'<p class="sub">Die Konfiguration ist fest in der Datei eingetragen.</p>':`
-  <label class="lbl">Firebase-Config einfügen</label>
-  <textarea id="cfgIn" class="inp" placeholder='const firebaseConfig = { apiKey: "…", projectId: "…", … };'></textarea>
-  <div class="actions"><button class="btn primary" data-act="save-cfg">Verbinden</button>${cfg?'<button class="btn danger" data-act="reset-cfg">Trennen</button>':''}</div>`}
-  <details><summary>Anleitung: Firebase einrichten</summary><ol>
-    <li>Auf <b>console.firebase.google.com</b> ein Projekt erstellen (Analytics kann aus bleiben).</li>
-    <li><b>Build → Firestore Database → Datenbank erstellen</b> (Standort Europa, z. B. eur3).</li>
-    <li><b>Build → Authentication → Get started → Sign-in method → Anonymous</b> aktivieren und speichern.</li>
-    <li><b>Projekteinstellungen → Allgemein → Web-App (&lt;/&gt;)</b> hinzufügen und den <b>firebaseConfig</b>-Block kopieren.</li>
-    <li>Den Block oben einfügen und auf „Verbinden“ tippen.</li>
-    <li>Unter <b>Firestore → Regeln</b> die Regeln unten einfügen und veröffentlichen.</li>
-    <li>Die Datei online hosten (GitHub Pages, Netlify, Firebase Hosting). Falls die Anmeldung scheitert: unter <b>Authentication → Settings → Authorized domains</b> die Domain der Seite hinzufügen.</li>
-    <li><b>Als Erstes selbst die Seite öffnen und dich „BOSS“ nennen</b>, bevor du den Link teilst.</li>
-  </ol></details>
-  <details><summary>Firestore-Regeln (BOSS-Sperre und Freigabe)</summary><pre class="code">${esc(RULES)}</pre><button class="btn sm" data-act="copy-rules">Regeln kopieren</button></details>
-  <details><summary>BOSS zurücksetzen oder übertragen</summary><p>Der BOSS-Status hängt an der anonymen Anmeldung deines Browsers. Wenn du die Browserdaten löschst oder das Gerät wechselst, bist du nicht mehr BOSS. Vorsorge: unter „Ich“ einen <b>BOSS-Code</b> erzeugen und sicher aufbewahren. Mit ihm meldest du dich auf einem neuen Gerät wieder als BOSS an. Ohne Code, zurücksetzen: in der Firebase-Konsole unter <b>Firestore → Daten → Sammlung „meta“</b> das Dokument <b>„boss“</b> löschen. Danach kann sich wieder jemand „BOSS“ nennen.</p></details>`;
-}
-
 function openSheet(type,id){
   if((type==='detail'||type==='rate'||type==='lesson')&&!S.A.has(id)){ toast('Lehrer nicht gefunden'); return; }
   const had=!!$('.sheet',$('#sheet-root'));
@@ -1186,7 +1160,6 @@ function renderSheet(first,still){
     case 'rate': inner=rateHTML(SHEET.id); break;
     case 'lesson': inner=lessonHTML(); break;
     case 'teacher': inner=teacherFormHTML(); break;
-    case 'settings': inner=settingsHTML(); break;
     case 'name': inner=nameHTML(); break;
     case 'legal': inner=legalHTML(SHEET.id); break;
     case 'bosscode': inner=bossCodeHTML(); break;
@@ -1209,8 +1182,6 @@ function closeSheet(){
 
 /* ---------- Render ---------- */
 function updateMode(){
-  const b=$('#modeBtn'); b.dataset.mode=S.mode;
-  $('#modeTxt').innerHTML=S.cloud?(S.mode==='error'?'Fehler':(!S.ready?'Verbinde':(isBoss()?'Live'+CROWN:'Live'))):'Lokal';
   const ab=$('#addBtn'); if(ab) ab.hidden=!canManage();
 }
 function renderBanner(){
@@ -1218,8 +1189,8 @@ function renderBanner(){
   const pn=pendingCount();
   const meTab=$('#tabbar [data-tab="me"]'); if(meTab){ meTab.innerHTML=`<i>4</i>Ich${pn?`<span class="bdg" aria-label="${pn} offene Anfrage${pn===1?'':'n'}">${pn}</span>`:''}`; }
   document.title=pn?`(${pn}) Lehrer-Check`:'Lehrer-Check';
-  if(S.mode==='error'){ b.hidden=false; b.className='banner err'; b.innerHTML=`${esc(S.err||'Verbindungsproblem')} <button class="lnk" data-act="settings">Einstellungen</button>`; }
-  else if(!S.cloud){ b.hidden=false; b.className='banner'; b.innerHTML='Lokaler Modus: Bewertungen bleiben nur auf diesem Gerät. <button class="lnk" data-act="settings">Mit der Klasse verbinden</button>'; }
+  if(S.mode==='error'){ b.hidden=false; b.className='banner err'; b.innerHTML=`${esc(S.err||'Verbindungsproblem')}`; }
+  else if(!S.cloud){ b.hidden=false; b.className='banner'; b.innerHTML='Lokaler Modus: Bewertungen bleiben nur auf diesem Gerät.'; }
   else if(S.ready&&!S.boss){ b.hidden=false; b.className='banner'; b.innerHTML='Noch kein BOSS. Wer sich als Erster „BOSS“ nennt, wird BOSS.'; }
   else if(pn>0){ b.hidden=false; b.className='banner'; b.innerHTML=`${pn} neue Zugangsanfrage${pn===1?'':'n'}. <button class="lnk" data-act="tab" data-tab="me">Ansehen</button>`; }
   else b.hidden=true;
@@ -1263,7 +1234,6 @@ const H={
   open(el){ openSheet('detail',el.dataset.id); },
   close(){ closeSheet(); },
   backdrop(el,e){ if(e.target!==el) return; if(nameLocked()||SHEET?.type==='bosskey') return; closeSheet(); },
-  settings(){ openSheet('settings'); },
   legal(el){ openSheet('legal',el.dataset.doc); },
   subj(el){ S.subj=el.dataset.s; renderChips(); renderList(true); },
 
@@ -1438,12 +1408,6 @@ const H={
     try{ await api.deleteMember(el.dataset.id); toast('Eintrag gelöscht'); }catch(err){ toast('Das hat nicht geklappt: '+errMsg(err)); }
   },
 
-  'save-cfg'(){
-    const cfg=parseCfg($('#cfgIn').value);
-    if(!cfg) return toast('Konfiguration nicht lesbar (apiKey/projectId fehlen)');
-    ls.set('lc_fbcfg',JSON.stringify(cfg)); location.reload();
-  },
-  'reset-cfg'(){ if(!confirm('Verbindung trennen und zum lokalen Modus wechseln?')) return; ls.del('lc_fbcfg'); location.reload(); },
   async 'copy-rules'(){ try{ await navigator.clipboard.writeText(RULES); toast('Regeln kopiert'); }catch{ toast('Kopieren nicht möglich. Bitte manuell markieren.'); } },
 
   export(){

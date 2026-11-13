@@ -75,8 +75,6 @@ html[data-design=glass] .nr{font-weight:700;letter-spacing:.1em}
 
 /* ---------- Kopf und Reiter: Milchglas-Leisten ---------- */
 html[data-design=glass] .top{background:var(--g-bar);backdrop-filter:blur(22px) saturate(165%);-webkit-backdrop-filter:blur(22px) saturate(165%);border-bottom:0;box-shadow:0 6px 24px rgba(var(--ink-rgb),.08)}
-html[data-design=glass] .stat{border:0;background:var(--g-fill);border-radius:var(--r);padding:6px 13px;font-weight:700;letter-spacing:.06em;box-shadow:none}
-html[data-design=glass] .stat i{border-radius:50%;border-width:2px}
 html[data-design=glass] .crown{fill:#e0a21a}
 html[data-design=glass] .banner{background:var(--g-fill);backdrop-filter:blur(16px) saturate(165%);-webkit-backdrop-filter:blur(16px) saturate(165%);border:0;border-radius:var(--r);box-shadow:var(--g-shadow);padding:11px 14px}
 html[data-design=glass] .banner.err::after{background:rgba(var(--red-rgb),.5)}
@@ -237,7 +235,6 @@ html[data-design=glass] .stampPop span{transform:none;outline:0;border:var(--g-l
    Der Rand ist überall exakt --g-line dick (ein Geräte-Pixel) und hellt zugleich das, was dahinter liegt, auf und erhöht den Kontrast.
    Technik: Ring als ::after mit eigenem ECHTEN Rand (border) und Maske: Der Browser rundet echte Ränder auf ganze Geräte-Pixel, daher ist der Ring
    an allen vier Seiten gleich dick (mit padding wurde er je nach Position oben dicker und unten dünner). Der Ring hat einen eigenen backdrop-filter. */
-html[data-design=glass] .stat,
 html[data-design=glass] .search,
 html[data-design=glass] .chip,
 html[data-design=glass] .qbtn,
@@ -256,7 +253,6 @@ html[data-design=glass] .trow,
 html[data-design=glass] .banner,
 html[data-design=glass] .toast,
 html[data-design=glass] details{position:relative}
-html[data-design=glass] .stat::after,
 html[data-design=glass] .search::after,
 html[data-design=glass] .chip::after,
 html[data-design=glass] .qbtn::after,
@@ -294,4 +290,4 @@ html[data-design=glass] .tabbar::after,html[data-design=glass] .d-actions::after
    nur so weit, wie es geht. Echte Kreise (Noten-Ring, Punkte) bleiben Kreise.
    corner-shape gibt es in Chrome/Edge ab Version 139. Wo es fehlt (z. B. ältere Safari), bleibt die normale Rundung. */
 html[data-design=glass] *,html[data-design=glass] *::before,html[data-design=glass] *::after{corner-shape:var(--g-shape)}
-html[data-design=glass] .grade,html[data-design=glass] .grade::before,html[data-design=glass] .grade::after,html[data-design=glass] .stat i{corner-shape:round}
+html[data-design=glass] .grade,html[data-design=glass] .grade::before,html[data-design=glass] .grade::after{corner-shape:round}
