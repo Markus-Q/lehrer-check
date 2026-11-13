@@ -1078,11 +1078,15 @@ function legalHTML(doc){
   let x=0,v=0,raf=0;
   let y0=0,dir=0,active=false,touching=false;
   let mT=0,mV=0;
+  let xs=[];                                             // letzte Verschiebungen mit Zeitstempel (für das Loslass-Tempo)
   let pinDir=0,pinMax=0;                                // Rand, an dem gerade gezogen/gefedert wird (+1 oben, -1 unten) und seine scrollTop-Grenze
   let lastTop=0,lastV=0,lastSc=null; const hist=[];
   const DIM=()=>Math.max(300,sc.clientHeight*0.8);
   const rubber=d=>{ const m=DIM(); return (1-1/((d*0.6/m)+1))*m; };
-  const draw=()=>{ if(el) el.style.transform=x?`translate3d(0,${x.toFixed(2)}px,0)`:''; };
+  // Auf ganze Geräte-Pixel gerundet: bei Bruchteil-Pixeln rendert der Browser Text unscharf/flimmernd, besonders im langsamen Ausklang der Feder,
+  // und beim Entfernen der Verschiebung am Ende rastet das Bild sichtbar ein.
+  const tr=v=>{ const r=window.devicePixelRatio||1; return v?`translate3d(0,${(Math.round(v*r)/r).toFixed(3)}px,0)`:''; };
+  const draw=()=>{ if(el) el.style.transform=tr(x); };
   const stop=()=>{ cancelAnimationFrame(raf); raf=0; };
   const reset=()=>{ stop(); x=0; v=0; draw(); };
   const findSc=t=>{ const n=t&&t.closest?t.closest('.sheet,#scroller'):null; return n; };
@@ -1095,7 +1099,7 @@ function legalHTML(doc){
       // sonst springt die erste Feder-Position ein paar Pixel in die Gegenrichtung.
       const t=Math.max(0,(now-t0)/1000), e=Math.exp(-W*t);
       x=(A+B*t)*e; v=(B-W*(A+B*t))*e;
-      if(target) target.style.transform=x?`translate3d(0,${x.toFixed(2)}px,0)`:'';
+      if(target) target.style.transform=tr(x);
       // Beim Zurückfedern ohne Finger nicht nativ nachscrollen lassen (sonst läuft ein nativer Schwung gegen die Feder)
       if(pinDir&&!touching&&sc){ const edge=pinDir>0?0:pinMax; if(Math.abs(sc.scrollTop-edge)>0.5) sc.scrollTop=edge; }
       if(t>1.4||(Math.abs(x)<0.15&&Math.abs(v)<4)){ x=0; v=0; pinDir=0; if(target) target.style.transform=''; raf=0; return; }
@@ -1119,7 +1123,7 @@ function legalHTML(doc){
     const y=e.touches[0].clientY, dy=y-y0, top=sc.scrollTop, max=sc.scrollHeight-sc.clientHeight;
     if(!active){
       if((dy>0&&top<=0)||(dy<0&&top>=max-1)){
-        active=true; dir=dy>0?1:-1; mT=e.timeStamp; mV=0; pinDir=dir; pinMax=max;
+        active=true; dir=dy>0?1:-1; mT=e.timeStamp; mV=0; xs=[]; pinDir=dir; pinMax=max;
         if(raf&&x*dir>0){
           // Die Feder läuft noch in dieselbe Richtung: Finger greift sie dort, wo sie gerade ist (Umkehrung der Gummiband-Kurve)
           stop(); const m=DIM(), r=Math.min(Math.abs(x)/m,0.97); y0=y-dir*(r/(1-r))*m/0.6; v=0;
@@ -1134,11 +1138,16 @@ function legalHTML(doc){
     const nx=dir*rubber(d), dt=Math.max(1,e.timeStamp-mT);
     mV=0.6*mV+0.4*((nx-x)/dt*1000); mT=e.timeStamp;
     x=nx; draw();
+    xs.push({t:e.timeStamp,x:nx}); while(xs.length>2&&e.timeStamp-xs[0].t>120) xs.shift();
   },{passive:true});   // passiv: blockiert das native Scrollen nicht (am Rand gibt es nichts zu scrollen)
   const end=e=>{
     if(!touching) return;
     touching=false;
-    if(active){ active=false; v=Math.abs(e.timeStamp-mT)<80?mV:0; if(v*x<0&&Math.abs(v)>W*Math.abs(x)) v=-W*x*0.95; spring(); }
+    if(active){
+      active=false;
+      // Tempo = Weg über die letzten ca. 80 ms; war der Finger vor dem Loslassen schon still (>80 ms), ist das Tempo 0
+      const L=xs[xs.length-1]; v=0;
+      if(L&&e.timeStamp-L.t<80){ const F=xs.find(s=>L.t-s.t<=80)||L; if(L.t-F.t>=16) v=Math.max(-4000,Math.min(4000,(L.x-F.x)/(L.t-F.t)*1000)); } if(v*x<0&&Math.abs(v)>W*Math.abs(x)) v=-W*x*0.95; spring(); }
   };
   document.addEventListener('touchend',end,{passive:true});
   document.addEventListener('touchcancel',end,{passive:true});
