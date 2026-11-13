@@ -12,7 +12,7 @@ const FIREBASE_CONFIG = {
   appId: "1:355339313897:web:5f02ddd2546f7d65bb8678"
 };
 const FB_VERSION = '10.12.2';
-const BUILD = '13.11.2026 19:06';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
+const BUILD = '13.11.2026 19:11';   // bei jeder Änderung hochzählen: steht unter „Ich“, damit man sieht, welcher Stand wirklich läuft (Browser-Cache)
 const LESSON_W = 0.10;   // Anteil der Stunden-Punkte an der Gesamtnote (10 %)
 const MIN_N = 3;         // Mindestanzahl Bewertungen (bzw. Schüler bei Stunden), bevor Ergebnisse gezeigt werden
 // Farben als CSS-Variablen, damit sie im Dunkelmodus mitwechseln
@@ -1530,12 +1530,17 @@ document.addEventListener('keydown',e=>{
     })).observe({type:'long-animation-frame',buffered:false});
   }catch{ add('Long-Animation-Frames nicht verfügbar'); }
   // Bildabstände nach dem Loslassen messen
+  // Bildabstand auch, solange der Finger unten ist (zum Vergleich mit dem Zurückfedern)
+  let dragTs=null;
+  document.addEventListener('touchstart',()=>{ const mine=dragTs=[]; const f=n=>{ if(dragTs!==mine) return; mine.push(n); requestAnimationFrame(f); }; requestAnimationFrame(f); },{passive:true});
   document.addEventListener('touchend',()=>{
+    if(dragTs&&dragTs.length>5){ const g=dragTs.slice(1).map((t,i)=>t-dragTs[i]); const m=[...g].sort((p,q)=>p-q)[g.length>>1]; add('Finger unten: normal '+m.toFixed(1)+'ms ('+Math.round(1000/m)+' Hz), '+dragTs.length+' Bilder'); }
+    dragTs=null;
     const ts=[]; const t0=performance.now();
     const f=n=>{ ts.push(n); if(n-t0<600) requestAnimationFrame(f); else {
       const gaps=ts.slice(1).map((t,i)=>t-ts[i]); const med=[...gaps].sort((a,b)=>a-b)[gaps.length>>1]||8.3;
       const bad=gaps.map((g,i)=>({g,at:ts[i]-t0})).filter(x=>x.g>med*1.6);
-      add('Feder: '+ts.length+' Bilder, normal '+med.toFixed(1)+'ms, Aussetzer '+bad.length+(bad.length?': '+bad.slice(0,6).map(x=>Math.round(x.g)+'ms bei '+Math.round(x.at)+'ms').join(', '):''));
+      add('Feder: '+ts.length+' Bilder, normal '+med.toFixed(1)+'ms ('+Math.round(1000/med)+' Hz), Aussetzer '+bad.length+(bad.length?': '+bad.slice(0,6).map(x=>Math.round(x.g)+'ms bei '+Math.round(x.at)+'ms').join(', '):''));
     } };
     requestAnimationFrame(f);
   },{passive:true});
