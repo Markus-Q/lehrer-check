@@ -78,10 +78,13 @@ const ls = {
 };
 /* Dunkelmodus: nur lokal im Browser gespeichert (lc_theme), folgt bewusst nicht der Geräteeinstellung */
 const isDark = ()=>ls.get('lc_theme')==='dark';
+/* Glas-Design (Beta): ersetzt den Papier-Look komplett (glass.css), ebenfalls nur lokal gespeichert (lc_design) */
+const isGlass = ()=>ls.get('lc_design')==='glass';
 function applyTheme(){
-  const d=isDark();
+  const d=isDark(), g=isGlass();
   document.documentElement.dataset.theme=d?'dark':'light';
-  $('meta[name=theme-color]')?.setAttribute('content',d?'#1c1b17':'#efe8d6');
+  document.documentElement.dataset.design=g?'glass':'paper';
+  $('meta[name=theme-color]')?.setAttribute('content',g?(d?'#0b1516':'#e6efed'):(d?'#1c1b17':'#efe8d6'));
   $('meta[name=color-scheme]')?.setAttribute('content',d?'dark':'light');
 }
 const withTimeout = (p,ms=10000)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Zeitüberschreitung – bist du online?')),ms))]);
@@ -527,7 +530,7 @@ function teacherCard(a,i){
   const bd=badgesFor(a).slice(0,3);
   return `<article class="trow" data-act="open" data-id="${esc(t.id)}" style="--i:${Math.min(i,14)}">
     <div class="tr-info"><span class="nr">Nr. ${String(i+1).padStart(2,'0')}</span><h3 class="tr-name"><span>${esc(t.name)}</span></h3><div class="tr-sub">${esc((t.subjects||[]).join(' · '))}</div></div>
-    <div class="grade">${a.ok?`${RING}<b>${fmt(a.overall)}</b><small>von 5</small>`:`<b class="none">–</b><small>${a.n?`${a.n}/${MIN_N}`:'offen'}</small>`}</div>
+    <div class="grade" style="--v:${a.ok?a.overall.toFixed(2):0}">${a.ok?`${RING}<b>${fmt(a.overall)}</b><small>von 5</small>`:`<b class="none">–</b><small>${a.n?`${a.n}/${MIN_N}`:'offen'}</small>`}</div>
     <div class="tr-bars">${CRIT.map(c=>`<div class="ar"><i>${c.no}</i><span>${c.short}</span>${boxes(a.avg[c.key],'xs')}<em>${fmt(a.avg[c.key])}</em></div>`).join('')}</div>
     <div class="tr-meta">${meta.join('')}${bd.map((b,k)=>`<span class="stamp s${k%3}">${esc(b)}</span>`).join('')}</div>
     <div class="tr-foot"><span class="cnt">${a.n} Bewertung${a.n===1?'':'en'}</span><span class="${mine?'done':'cta'}">${mine?'bewertet':'Bewerten'}</span><button class="qbtn" data-act="lesson" data-id="${esc(t.id)}">Stunde</button></div>
@@ -728,7 +731,7 @@ function viewMe(){
   return `${title('Mein Heft')}
   <div class="namefield"><span class="lab">Name</span><div class="nf-v">${esc(UNAME||'unbekannt')}${isBoss()?CROWN:''}</div>${!S.cloud?'<button class="btn sm" data-act="rename">Ändern</button>':''}</div>
   <p class="lede">${isBoss()?'Du bist BOSS und verwaltest die Lehrerliste.':(tag||'Bewerte mindestens zwei Lehrer, dann steht hier, ob du eher streng oder gnädig bist.')}</p>
-  <div class="kpi3" style="border-top:2px solid var(--ink);margin-top:14px">
+  <div class="kpi3 top">
     <div class="kpi"><b>${mine.length}</b><span>Bewertungen</span></div>
     <div class="kpi"><b>${myLessons.length}</b><span>Stunden</span></div>
     <div class="kpi"><b>${fmt(myAvg)}</b><span>Ø von dir</span></div>
@@ -740,6 +743,7 @@ function viewMe(){
   ${myLessons.length?`<section class="blk"><h3>Meine Stunden (zuletzt)</h3>${myLessons.slice(0,8).map(l=>{ const a=S.A.get(l.teacherId); return `<div class="lrow static">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDay(l.day)}</small></div><span class="pts" style="color:${lessonColor(l.points)}">${fmtPts(l.points)}</span></div>`; }).join('')}</section>`:''}
   <section class="blk"><h3>Werkzeuge</h3><div class="tools">
     <button class="btn" data-act="theme">${isDark()?'Hellmodus':'Dunkelmodus'}</button>
+    <button class="btn" data-act="design">${isGlass()?'Papier-Design':'Glas-Design (Beta)'}</button>
     <button class="btn" data-act="export">Bewertungen als CSV</button>
     <button class="btn" data-act="export-lessons">Stunden als CSV</button>
     <button class="btn" data-act="share">Link teilen</button>
@@ -771,7 +775,7 @@ function detailHTML(tid){
   } else if(!a.ok){
     body=`<div class="empty" style="margin-top:6px"><h3>Noch zu wenig.</h3><p>${a.n} von ${MIN_N} Bewertungen. Ergebnisse zeigt die Seite erst ab ${MIN_N}, damit niemand einzeln erkennbar ist.</p></div>${lessonBlock}`;
   } else {
-    body=`<div class="d-score"><div class="grade big">${RING}<b>${fmt(a.overall)}</b><small>von 5</small></div><div class="ds-r">${boxes(a.overall,'lg')}<div class="cnt" style="margin:0">${a.n} Bewertung${a.n===1?'':'en'}</div></div></div>
+    body=`<div class="d-score"><div class="grade big" style="--v:${a.overall.toFixed(2)}">${RING}<b>${fmt(a.overall)}</b><small>von 5</small></div><div class="ds-r">${boxes(a.overall,'lg')}<div class="cnt" style="margin:0">${a.n} Bewertung${a.n===1?'':'en'}</div></div></div>
     ${(bd.length||a.recPct!=null)?`<div class="badges-row">${a.recPct!=null?`<span class="stamp s1">${Math.round(a.recPct)} % empfehlen (${a.recN})</span>`:''}${bd.map((b,k)=>`<span class="stamp s${k%3===1?2:k%3}">${esc(b)}</span>`).join('')}</div>`:''}
     ${tagList.length?`<div class="d-sec"><h4>Tags</h4><div class="chips">${tagList.map(([id,n])=>`<span class="chip sm" style="color:var(--gr)">${esc(tagLabel(id))} · ${n}×</span>`).join('')}</div></div>`:''}
     <div class="d-sec"><h4>Profil</h4>${radarSVG([{vals:CRIT.map(c=>a.avg[c.key]),color:INK}])}</div>
@@ -1468,6 +1472,7 @@ const H={
     }catch{}
   },
   theme(){ ls.set('lc_theme',isDark()?'light':'dark'); applyTheme(); renderMain(false); },
+  design(){ ls.set('lc_design',isGlass()?'paper':'glass'); applyTheme(); renderMain(false); },
   'demo-load'(){ loadDemo(); toast('Demo-Daten geladen'); },
   'demo-clear'(){ clearDemo(); toast('Demo-Daten entfernt'); }
 };

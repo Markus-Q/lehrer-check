@@ -193,6 +193,7 @@ h1,h2,h3,h4,p{margin:0}
 .kpi span{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
 .kpi3{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--ink)}
 .kpi3 .kpi{padding:12px 10px}
+.kpi3.top{border-top:2px solid var(--ink);margin-top:14px}
 .kpi3 .kpi:first-child{padding-left:0}
 .kpi3 .kpi+.kpi{border-left:1px solid var(--ink)}
 .lb{display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule2)}

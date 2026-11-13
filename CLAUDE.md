@@ -5,7 +5,7 @@ Dieses Dokument ersetzt den bisherigen Chat. Zusätzlich zum Code gilt alles hie
 ## 1. Worum es geht
 
 - **Max** (Maximilian Zeren, Schüler, Deutschland) hat die Webseite „Lehrer-Check“ für seine Klasse gebaut. Die Klasse bewertet ihre Lehrer anonym-sachlich mit Sternen. Die Seite ist **nur für Klassenmitglieder** gedacht.
-- **Drei Dateien:** `index.html` (Grundgerüst), `style.css` (CSS) und `app.js` (JavaScript als ES-Modul, ca. 1340 Zeilen, LF-Zeilenenden). Lokal per Doppelklick geht es nicht (Module brauchen einen Server, z. B. ein kleiner Node-Server (Python ist auf Maxs PC nicht installiert)). Kein Build, kein npm, keine Abhängigkeiten außer den Firebase-SDK-Imports von `gstatic.com` (Version `10.12.2`, Konstante `FB_VERSION`).
+- **Vier Dateien:** `index.html` (Grundgerüst), `style.css` (Papier-Design), `glass.css` (Glas-Design, Beta) und `app.js` (JavaScript als ES-Modul, ca. 1340 Zeilen, LF-Zeilenenden). Lokal per Doppelklick geht es nicht (Module brauchen einen Server, z. B. ein kleiner Node-Server (Python ist auf Maxs PC nicht installiert)). Kein Build, kein npm, keine Abhängigkeiten außer den Firebase-SDK-Imports von `gstatic.com` (Version `10.12.2`, Konstante `FB_VERSION`).
 - **Sprache der Oberfläche: Deutsch.** Kommentare im Code ebenfalls Deutsch. Halte diesen Stil bei.
 
 ## 2. Hosting und Infrastruktur
@@ -52,11 +52,12 @@ Dieses Dokument ersetzt den bisherigen Chat. Zusätzlich zum Code gilt alles hie
 - Cloud: `startCloud` (anonymer Login, `meta/boss` und `members/{UID}` abonnieren), `syncAccess`, `startData`, `stopData`, `recomputeReady`, `claimBoss`, `startLocal`. `api = {requestAccess, withdrawAccess, setMember, deleteMember, addTeacher, updateTeacher, deleteTeacher, saveRating, deleteRating, saveLesson, deleteLesson}`.
 - Rendering: `renderMain`, `refreshMain`, `onData`, `renderBanner`, `gateHTML` (Wartescreen ohne Zugang), `viewMe`, `memberSection`, `detailHTML`, `rateHTML`, `lessonHTML`, `teacherFormHTML`, `settingsHTML`, `nameHTML`/`requestHTML`, `legalHTML`. Fenster („Sheets“): `openSheet(type,id)`, `renderSheet`, `closeSheet` (Typen: detail, rate, lesson, teacher, settings, name, legal).
 - Events: **ein** Handler-Objekt `H` mit Aktionen über `data-act="…"` (Event-Delegation). Neue Buttons bekommen `data-act` und einen Eintrag in `H`.
-- Lokale Speicherung im Browser (immer in try/catch über `ls`): `lc_uid`, `lc_name`, `lc_local_v1`, `lc_fbcfg`, `lc_theme` (`dark`; Dunkelmodus nur per Schalter unter „Ich“, folgt bewusst nicht dem Gerät; Farben als CSS-Variablen in `style.css`, `html[data-theme=dark]`).
+- Lokale Speicherung im Browser (immer in try/catch über `ls`): `lc_uid`, `lc_name`, `lc_local_v1`, `lc_fbcfg`, `lc_design` (`glass`; Glas-Design, sonst Papier), `lc_theme` (`dark`; Dunkelmodus nur per Schalter unter „Ich“, folgt bewusst nicht dem Gerät; Farben als CSS-Variablen in `style.css`, `html[data-theme=dark]`).
 
 ## 7. Design: Schulheft-Look, bewusst nicht „KI-haft“
 
 - Konzept: **Zeugnis / Schulheft.** Karoraster, roter Randstrich links (`body::before`), tintenblau (`--ink` `#1b2a6b`), rot (`--red` `#bd3022`), Papierbeige, Graphit (`#26251f`). Schriften: **Gloock** (Überschriften) und **Courier Prime** (Text). Handgezeichnete SVG-Formen (Haken, roter Ring um die Note, Unterstreichungen), Stempel-Effekt, Strichzeichnung-Animationen.
+- **Glas-Design (Beta, optional):** Umschalter unter „Ich“ → Werkzeuge („Glas-Design (Beta)“ / „Papier-Design“), lokal gespeichert (`lc_design`), gesetzt als `html[data-design=glass]` (vor dem ersten Rendern per Inline-Skript in `index.html`). `glass.css` ersetzt den Papier-Look komplett: Milchglas-Scheiben mit `backdrop-filter`, farbiger Hintergrund aus weichen Farbflächen, Petrol (`--ink`) und Koralle (`--red`, nur für Warnendes), Systemschrift, Ring-Note (`--v` am `.grade`), Balken statt Kästchen, Pillen statt Stempel. Funktioniert hell und dunkel. Alles ist an `html[data-design=glass]` gebunden, Papier bleibt Standard und unverändert. Die Farben laufen über CSS-Variablen (auch `--ink-rgb`/`--red-rgb`), neue Elemente also immer mit Variablen stylen. Performance-Vorsicht: Blur nur auf wenigen Flächen (Leisten, Karten, Fenster), nicht auf jeder Kleinigkeit.
 - **Entfernt auf Wunsch (nicht wieder einbauen):** die Tackerlöcher am linken Rand und die Papierkorn-Schicht (Rauschfilter).
 - Mobil zuerst. Safe-Area-Insets beachten. `prefers-reduced-motion` wird respektiert.
 
