@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#efe8d6">
+<title>Lehrer-Check</title>
+<!--
+  DESIGNRICHTUNG
+  Konzept:   Ein korrigiertes Schulheft. Kariertes Papier, rote Randlinie, Lochung links. Lehrer werden wie Klassenarbeiten benotet:
+             Kästchen ankreuzen, Rotstift-Kringel um die Gesamtzahl, Stempel für Auszeichnungen, Randbemerkungen für Kommentare.
+  Schriften: Gloock (Display, wuchtige Serife für Titel, Namen, Zahlen) + Courier Prime (Text, Schreibmaschine wie ausgefülltes Formular).
+  Farben:    Füllerblau #1b2a6b (Hauptfarbe), Korrekturrot #bd3022 (Akzent), Papier #efe8d6, Graphit #26251f. Alles als CSS-Variablen.
+  Layout:    Linke Randlinie als Anker, Zeilen statt Karten, jede zweite Zeile eingerückt, Titel mit versetzter zweiter Zeile,
+             sehr große Zahlen gegen winzige Großbuchstaben-Labels. Keine Schatten, keine Rundungen außer dem handgezeichneten Kringel.
+  Bewegung:  1) Seitenaufbau: Zeilen werden von links nach rechts "geschrieben", rote Kringel zeichnen sich. 2) Hover: rote Wellenlinie
+             unter dem Lehrernamen. 3) Nach dem Bewerten fällt ein Stempel aufs Blatt. Sonst Ruhe.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Gloock&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#efe8d6;--paper2:#e3dac2;--ink:#1b2a6b;--red:#bd3022;--gr:#26251f;
+  --mute:rgba(38,37,31,.66);--rule:rgba(27,42,107,.11);--rule2:rgba(27,42,107,.35);
+  --disp:'Gloock','Georgia',serif;--mono:'Courier Prime','Courier New',monospace;
+  --ease:cubic-bezier(.22,1,.36,1);
+  --line-x:calc(max(0px,(100vw - 1000px)/2) + 22px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+::selection{background:var(--ink);color:var(--paper)}
+html{background:var(--paper);scrollbar-width:thin;scrollbar-color:var(--ink) var(--paper2)}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:var(--paper2);border-left:1px solid var(--ink)}
+::-webkit-scrollbar-thumb{background:var(--ink);border:2px solid var(--paper2)}
+body{
+  margin:0;min-height:100dvh;color:var(--gr);font-family:var(--mono);font-size:15px;line-height:1.5;
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px);
+  background-size:20px 20px;
+  padding-bottom:calc(92px + env(safe-area-inset-bottom));
+  -webkit-font-smoothing:antialiased;
+  cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='7' fill='none' stroke='%23bd3022' stroke-width='2'/><circle cx='12' cy='12' r='1.6' fill='%231b2a6b'/></svg>") 12 12,auto;
+}
+body.lock{overflow:hidden}
+button,[data-act],.chip,select,label.search{
+  cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26'><circle cx='13' cy='13' r='9' fill='%23bd3022' fill-opacity='.18' stroke='%23bd3022' stroke-width='2.2'/><circle cx='13' cy='13' r='2.4' fill='%23bd3022'/></svg>") 13 13,pointer;
+}
+input,textarea{cursor:text}
+/* Papierkorn, Randlinie, Lochung */
+body::before{content:'';position:fixed;top:0;bottom:0;left:var(--line-x);width:2px;background:var(--red);opacity:.8;z-index:0;pointer-events:none}
+body::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.35;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .15  0 0 0 0 .13  0 0 0 0 .1  0 0 0 .22 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.holes{position:fixed;left:calc(var(--line-x) - 34px);top:0;bottom:0;width:22px;z-index:0;pointer-events:none}
+.holes i{position:absolute;left:0;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle,#2a2823 0 46%,#bfb69c 50% 100%);border:1px solid rgba(38,37,31,.4)}
+.holes i:nth-child(1){top:24%}
+.holes i:nth-child(2){top:76%}
+h1,h2,h3,h4,p{margin:0}
+.wrap{position:relative;z-index:2;max-width:1000px;margin:0 auto;padding:0 18px 0 34px}
+
+/* Kopf */
+.top{position:sticky;top:0;z-index:40;background:var(--paper);border-bottom:2px solid var(--ink);padding:calc(8px + env(safe-area-inset-top)) 0 8px}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.brand{display:flex;align-items:center;gap:5px;font-family:var(--disp);font-size:22px;line-height:1;color:var(--ink);white-space:nowrap}
+.tickm{width:26px;height:22px;overflow:visible}
+.tickm path{fill:none;stroke:var(--red);stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:0;animation:draw .7s .3s var(--ease) backwards}
+@keyframes draw{from{stroke-dashoffset:1}}
+.hact{display:flex;align-items:center;gap:8px}
+.stat{display:flex;align-items:center;gap:6px;font:inherit;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);background:transparent;border:0;border-bottom:2px solid var(--ink);padding:4px 0}
+.stat i{display:block;width:9px;height:9px;border:2px solid var(--ink)}
+.stat[data-mode=cloud] i{background:var(--ink)}
+.stat[data-mode=error] i{background:var(--red);border-color:var(--red)}
+.crown{display:inline-block;width:19px;height:12px;vertical-align:-1px;margin-left:5px;fill:var(--red)}
+.banner{margin:14px 0 0;padding:9px 12px;font-size:13px;border:1.5px dashed var(--ink);border-left:6px solid var(--red);background:var(--paper)}
+.banner.err{border-color:var(--red)}
+.lnk{font:inherit;background:none;border:0;padding:0;margin-left:6px;font-weight:700;text-decoration:underline;color:var(--ink)}
+.lnk.danger{color:var(--red)}
+
+/* Reiter unten */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;background:var(--paper);border-top:2px solid var(--ink);padding-bottom:env(safe-area-inset-bottom)}
+.tabbar button{flex:1;font:inherit;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);background:transparent;border:0;border-right:1.5px solid var(--rule2);
+  padding:9px 2px 8px;display:flex;flex-direction:column;align-items:center;gap:1px;transition:background .15s,color .15s}
+.tabbar button:last-child{border-right:0}
+.tabbar button i{font-style:normal;font-family:var(--disp);font-size:19px;line-height:1.1;color:var(--red)}
+.tabbar button.on{background:var(--ink);color:var(--paper)}
+.tabbar button.on i{color:var(--paper)}
+
+/* Titel */
+.view{animation:viewIn .35s var(--ease) backwards}
+@keyframes viewIn{from{opacity:0}}
+.still,.still *{animation:none!important}
+.vt{font-family:var(--disp);font-weight:400;font-size:clamp(48px,13vw,112px);line-height:.9;letter-spacing:-.02em;color:var(--ink);margin:26px 0 14px}
+.vt .l2{display:block;padding-left:clamp(14px,6vw,96px)}
+.vt em{font-style:normal;position:relative;display:inline-block}
+.ul{position:absolute;left:-2%;bottom:-.04em;width:104%;height:.17em;overflow:visible}
+.ul path{fill:none;stroke:var(--red);stroke-width:3.5;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:0;vector-effect:non-scaling-stroke;animation:draw .8s .6s var(--ease) backwards}
+.lede{max-width:34em;font-size:15px;color:var(--mute);margin-bottom:8px}
+.lab{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+.blk{margin-top:34px}
+.blk>h3,.sec>h3{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--red);border-bottom:2px solid var(--ink);padding-bottom:6px;margin-bottom:14px}
+.sgrid{display:grid;gap:30px 40px;grid-template-columns:1fr}
+@media(min-width:820px){.sgrid{grid-template-columns:1.2fr .8fr}.sgrid.rev{grid-template-columns:.8fr 1.2fr}}
+.boards{display:grid;gap:26px 34px;grid-template-columns:1fr}
+@media(min-width:620px){.boards{grid-template-columns:1fr 1fr}}
+
+/* Suche */
+.toolbar{display:flex;gap:18px;align-items:flex-end;margin:20px 0 12px}
+.search{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;border-bottom:2px solid var(--ink)}
+.search .lab{color:var(--red);flex:none}
+.search input{flex:1;min-width:0;font:inherit;font-size:16px;background:transparent;border:0;outline:0;padding:8px 0;color:var(--gr);border-radius:0}
+.sel{font:inherit;font-size:13px;font-weight:700;color:var(--ink);background:transparent;border:0;border-bottom:2px solid var(--ink);border-radius:0;padding:8px 0;max-width:46%;color-scheme:light}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.chips.scroll::-webkit-scrollbar{display:none}
+.chip{font:inherit;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);background:transparent;border:1.5px solid var(--ink);border-radius:0;padding:6px 10px;white-space:nowrap;transition:background .12s,color .12s}
+.chip.on{background:var(--ink);color:var(--paper)}
+.chip.sm{border-color:var(--rule2);color:var(--mute);padding:2px 7px;font-size:10px}
+.chips.wrapc .chip{white-space:normal;text-align:left}
+.sug-label{width:100%;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-top:6px}
+
+/* Lehrerzeilen */
+.trow{position:relative;display:grid;grid-template-columns:1fr auto;grid-template-areas:"info grade" "bars bars" "meta meta" "foot foot";gap:12px 16px;
+  padding:20px 0 18px;border-top:2px solid var(--ink);animation:rowIn .7s var(--ease) backwards;animation-delay:calc(var(--i,0)*80ms)}
+@keyframes rowIn{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.trow:nth-child(even){margin-left:clamp(0px,6vw,64px)}
+.trow:nth-child(3n){margin-right:clamp(0px,4vw,44px)}
+.tr-info{grid-area:info;min-width:0}
+.nr{display:block;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--red);margin-bottom:6px}
+.tr-name{font-family:var(--disp);font-weight:400;font-size:clamp(30px,8.5vw,42px);line-height:1;color:var(--ink);overflow-wrap:anywhere}
+.tr-name span{padding-bottom:.06em;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 12' preserveAspectRatio='none'><path d='M2 7C20 2 38 11 58 6S96 3 118 7' fill='none' stroke='%23bd3022' stroke-width='3' stroke-linecap='round'/></svg>") 0 100%/0 .3em no-repeat;transition:background-size .5s var(--ease)}
+.trow:hover .tr-name span{background-size:100% .3em}
+.tr-sub{margin-top:8px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+.grade{position:relative;width:88px;height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:none}
+.grade b{font-family:var(--disp);font-weight:400;font-size:36px;line-height:1;color:var(--ink)}
+.grade b.none{color:var(--mute)}
+.grade small{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin-top:3px}
+.grade.big{width:116px;height:116px}
+.grade.big b{font-size:50px}
+.trow .grade{grid-area:grade;justify-self:end}
+.ring{position:absolute;left:-6px;top:-6px;width:calc(100% + 12px);height:calc(100% + 12px);overflow:visible;pointer-events:none}
+.ring path{fill:none;stroke:var(--red);stroke-width:3.2;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:0;animation:draw .9s var(--ease) backwards;animation-delay:calc(var(--i,0)*80ms + .4s)}
+.tr-bars{grid-area:bars;display:grid;gap:3px 24px}
+@media(min-width:560px){.tr-bars{grid-template-columns:1fr 1fr}}
+.ar{display:grid;grid-template-columns:14px 1fr auto 30px;align-items:center;gap:8px;font-size:12px;line-height:1.4}
+.ar i{font-style:normal;font-family:var(--disp);font-size:13px;color:var(--red)}
+.ar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ar em{font-style:normal;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.tr-meta{grid-area:meta;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.tr-meta:empty{display:none}
+.mt{font-size:12px;color:var(--mute)}
+.mt b{color:var(--gr)}
+.tr-foot{grid-area:foot;display:flex;align-items:center;gap:14px;font-size:12px}
+.cnt{color:var(--mute);margin-right:auto}
+.done{font-weight:700;color:var(--ink);text-decoration:underline}
+.cta{font-weight:700;color:var(--red);letter-spacing:.08em;text-transform:uppercase}
+.qbtn{font:inherit;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);background:transparent;border:1.5px solid var(--ink);border-radius:0;padding:4px 9px;transition:background .12s,color .12s}
+.qbtn:hover{background:var(--ink);color:var(--paper)}
+@media(min-width:820px){
+  .trow{grid-template-columns:minmax(220px,1fr) minmax(300px,1.15fr) 116px;grid-template-areas:"info bars grade" "meta bars grade" "foot bars grade";align-items:start}
+  .tr-bars{grid-template-columns:1fr}
+  .tr-foot{align-self:end}
+}
+.stamp{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:3px 8px;border:2px solid var(--red);outline:1px solid var(--red);outline-offset:2px;color:var(--red);transform:rotate(-2.5deg);margin:2px 3px}
+.stamp.s1{transform:rotate(1.6deg);border-color:var(--ink);outline-color:var(--ink);color:var(--ink)}
+.stamp.s2{transform:rotate(-1deg)}
+.boxes{--s:12px;--g:4px;position:relative;display:inline-block;overflow:hidden;vertical-align:middle;width:calc(var(--s)*5 + var(--g)*4);height:var(--s);
+  background:repeating-linear-gradient(90deg,rgba(27,42,107,.16) 0 var(--s),transparent var(--s) calc(var(--s) + var(--g)))}
+.boxes::after{content:'';position:absolute;left:0;top:0;bottom:0;width:var(--w);background:repeating-linear-gradient(90deg,var(--ink) 0 var(--s),transparent var(--s) calc(var(--s) + var(--g)))}
+.boxes.xs{--s:9px;--g:3px}
+.boxes.lg{--s:22px;--g:6px}
+
+/* Diagramme */
+.hb{height:10px;border:1.5px solid var(--ink)}
+.hb i{display:block;height:100%;width:var(--w);background:repeating-linear-gradient(135deg,var(--ink) 0 2px,transparent 2px 4px);animation:growW .7s var(--ease) backwards}
+@keyframes growW{from{width:0}}
+.hrow{display:grid;grid-template-columns:minmax(110px,190px) 1fr 42px;gap:12px;align-items:center;margin:10px 0}
+.hl{font-size:13px}
+.hno{font-family:var(--disp);color:var(--red);margin-right:6px}
+.hv{font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.cols{display:flex;gap:10px;align-items:stretch;height:170px}
+.cols.sm{height:120px}
+.col{flex:1;display:flex;flex-direction:column;min-width:0}
+.cb{flex:1;display:flex;align-items:flex-end;padding-top:22px}
+.cb i{position:relative;display:block;width:100%;height:var(--h);min-height:4px;border:2px solid var(--ink);background:repeating-linear-gradient(135deg,var(--ink) 0 2px,transparent 2px 5px);animation:growH .7s var(--ease) backwards}
+.cb i b{position:absolute;top:-22px;left:-2px;right:-2px;text-align:center;font-size:12px;font-weight:700;font-style:normal}
+@keyframes growH{from{height:0}}
+.cl{text-align:center;font-size:11px;color:var(--mute);margin-top:6px;white-space:nowrap}
+.dv{display:flex;gap:6px;height:130px;position:relative}
+.dv::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:var(--ink)}
+.dvc{flex:1;position:relative;height:100%}
+.dvb{position:absolute;left:14%;right:14%;min-height:3px;animation:growH .7s var(--ease) backwards}
+.dvb.up{bottom:50%}
+.dvb.down{top:50%}
+.dvl{display:flex;gap:6px;margin-top:6px}
+.dvl span{flex:1;text-align:center;font-size:10px;color:var(--mute);line-height:1.3}
+.radar{width:100%;max-width:440px;display:block;margin:0 auto}
+.radar .rgrid{fill:none;stroke:var(--rule2)}
+.radar .raxis{stroke:var(--rule2)}
+.radar .rlab{fill:var(--gr);font-family:var(--mono);font-size:11px;font-weight:700}
+.radar .rpoly{stroke-width:2.5;stroke-linejoin:round;transform-origin:190px 158px;animation:radarIn .6s var(--ease) backwards}
+@keyframes radarIn{from{transform:scale(.2);opacity:0}}
+.trend{width:100%;height:90px;display:block}
+.kpis{margin:20px 0 0;border-top:2px solid var(--ink)}
+.kpi{padding:12px 0}
+.kpi.lead{border-bottom:1px solid var(--ink);padding-bottom:6px}
+.kpi b{display:block;font-family:var(--disp);font-weight:400;font-size:clamp(40px,11vw,60px);line-height:1;color:var(--ink)}
+.kpi.lead b{font-size:clamp(88px,28vw,168px);color:var(--red);letter-spacing:-.03em}
+.kpi span{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.kpi3{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--ink)}
+.kpi3 .kpi{padding:12px 10px}
+.kpi3 .kpi:first-child{padding-left:0}
+.kpi3 .kpi+.kpi{border-left:1px solid var(--ink)}
+.lb{display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule2)}
+.lb:last-child{border-bottom:0}
+.medal{font-family:var(--disp);font-size:24px;color:var(--red);width:22px;flex:none;line-height:1}
+.lbn{flex:1;font-weight:700;font-size:14px}
+.lbn small{font-weight:400;color:var(--mute)}
+.lbv{font-family:var(--disp);font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums}
+.facts{display:grid;grid-template-columns:1fr;gap:0 36px}
+@media(min-width:700px){.facts{grid-template-columns:1fr 1fr}}
+.fact{padding:6px 0 6px 14px;border-left:3px solid var(--red);margin-bottom:14px}
+.fact b{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--red)}
+.heatwrap{overflow-x:auto}
+.heat{width:100%;border-collapse:separate;border-spacing:3px;font-size:13px}
+.heat th{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);text-align:center}
+.heat th span{display:block;font-weight:400;color:var(--mute)}
+.heat .hn{text-align:left;font-weight:700;white-space:nowrap;padding-right:10px}
+.heat .hn small{color:var(--mute);margin-left:6px;font-weight:400}
+.hc{display:block;text-align:center;padding:6px 3px;min-width:40px;font-variant-numeric:tabular-nums;border:1px solid var(--rule2)}
+.hc.strong{font-weight:700;border-color:var(--ink)}
+.empty{padding:26px 0 10px;border-top:2px solid var(--ink)}
+.empty h3{font-family:var(--disp);font-weight:400;font-size:clamp(38px,10vw,56px);line-height:1;color:var(--ink);margin-bottom:10px}
+.empty p{max-width:30em;color:var(--mute);margin-bottom:14px}
+.empty .row2{display:flex;gap:10px;flex-wrap:wrap}
+
+/* Formulare */
+.btn{font:inherit;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--paper);border:2px solid var(--ink);border-radius:0;padding:11px 16px;transition:background .15s,color .15s,transform .1s}
+.btn:hover{background:var(--ink);color:var(--paper)}
+.btn:active{transform:translate(1px,2px)}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn.primary:hover{background:var(--red);border-color:var(--red)}
+.btn.sm{padding:6px 10px;font-size:12px}
+.btn.ghost{border-color:transparent;text-decoration:underline}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn.danger:hover{background:var(--red);color:var(--paper)}
+.btn:disabled{opacity:.35;pointer-events:none}
+.inp{width:100%;font:inherit;font-size:16px;color:var(--gr);background:var(--paper);border:2px solid var(--ink);border-radius:0;padding:11px 12px;outline:0}
+.inp:focus{outline:3px solid var(--red);outline-offset:2px}
+textarea.inp{resize:vertical;min-height:90px;line-height:1.4}
+.lbl{display:block;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--red);margin:20px 0 8px}
+.row{display:flex;gap:8px}
+.actions{display:flex;gap:10px;margin-top:22px}
+.actions .btn{flex:1}
+.sub{font-size:14px;color:var(--mute);margin:8px 0 14px}
+
+/* Blätter (Sheets) */
+.backdrop{position:fixed;inset:0;z-index:100;background:rgba(38,37,31,.6);display:flex;align-items:flex-end;justify-content:center;animation:fade .2s both}
+@keyframes fade{from{opacity:0}}
+.sheet{width:100%;max-width:720px;max-height:94dvh;overflow:auto;overscroll-behavior:contain;background-color:var(--paper);
+  background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px);background-size:20px 20px;
+  border-top:4px solid var(--ink);padding:16px 18px calc(18px + env(safe-area-inset-bottom));animation:sheetUp .35s var(--ease) backwards}
+@keyframes sheetUp{from{transform:translateY(40px);opacity:0}}
+@media(min-width:720px){.backdrop{align-items:center}.sheet{border:2px solid var(--ink);max-height:90dvh}}
+.si{animation:fade .2s both}
+.sh{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;min-height:30px}
+.sh h2{font-family:var(--disp);font-weight:400;font-size:clamp(26px,7vw,34px);line-height:1.05;color:var(--ink)}
+.x{font:inherit;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);background:transparent;border:1.5px solid var(--ink);border-radius:0;padding:5px 9px;margin-left:auto;flex:none}
+.x:hover{background:var(--ink);color:var(--paper)}
+.d-hero{display:flex;gap:14px;align-items:flex-end;margin:8px 0 18px}
+.av{display:grid;place-items:center;width:42px;height:42px;border:2px solid var(--ink);font-family:var(--disp);font-size:17px;color:var(--ink);flex:none}
+.av.lg{width:72px;height:72px;font-size:30px;background:repeating-linear-gradient(135deg,transparent 0 5px,rgba(27,42,107,.14) 5px 6px)}
+.d-name{font-family:var(--disp);font-weight:400;font-size:clamp(34px,10vw,54px);line-height:.95;color:var(--ink);margin-bottom:8px;overflow-wrap:anywhere}
+.d-score{display:flex;align-items:center;gap:26px;padding:20px 8px 18px 4px;border-top:2px solid var(--ink);border-bottom:1px solid var(--ink)}
+.ds-r{display:flex;flex-direction:column;gap:10px}
+.badges-row{display:flex;flex-wrap:wrap;gap:8px 6px;margin-top:16px}
+.d-sec{margin-top:28px}
+.d-sec h4{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--red);margin-bottom:12px}
+.d-sec h4::after{content:'';flex:1;height:1px;background:var(--ink);opacity:.4}
+.note{font-size:14px;color:var(--mute);margin-bottom:12px}
+.cm{padding:6px 0 8px 14px;border-left:3px solid var(--red);margin-bottom:14px}
+.cm.mine{border-left-color:var(--ink)}
+.cm-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;margin-bottom:4px}
+.cm-h b{letter-spacing:.06em;text-transform:uppercase}
+.cm-h span{color:var(--mute)}
+.cm p{font-style:italic;word-break:break-word}
+.tag{font-size:10px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--rule2);padding:1px 6px}
+.mgmt{display:flex;gap:18px;margin-top:22px;font-size:13px}
+.d-actions{position:sticky;bottom:calc(-18px - env(safe-area-inset-bottom));display:flex;gap:8px;margin:22px -18px calc(-18px - env(safe-area-inset-bottom));
+  padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:var(--paper);border-top:2px solid var(--ink)}
+.d-actions .btn{flex:1}
+.d-actions .btn.ic{flex:0 0 auto}
+.rate-row{margin-top:20px;padding-top:12px;border-top:1px solid var(--rule2)}
+.rr-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.rr-head b{font-family:var(--disp);font-weight:400;font-size:22px;line-height:1.1;color:var(--ink)}
+.rr-head .no{color:var(--red);margin-right:8px}
+.rr-txt{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--red);text-align:right}
+.hint{font-size:13px;color:var(--mute);margin:3px 0 10px}
+.starsel{display:flex;gap:8px}
+.st{flex:1;max-width:62px;aspect-ratio:1;font-family:var(--disp);font-size:22px;color:var(--ink);background:transparent;border:2px solid var(--ink);border-radius:0;padding:0;transition:background .12s,color .12s}
+.st.on{background:var(--ink);color:var(--paper)}
+.st.pop{animation:pop .25s}
+@keyframes pop{40%{transform:scale(.84)}}
+.recrow{display:flex;gap:10px}
+.recrow .btn{flex:1}
+.recrow .btn.on{background:var(--ink);color:var(--paper)}
+.recrow .btn.no.on{background:var(--red);border-color:var(--red);color:var(--paper)}
+.cc{font-size:12px;color:var(--mute);text-align:right;margin-top:4px}
+.lesson-val{font-family:var(--disp);font-size:clamp(100px,32vw,160px);line-height:.9;text-align:center;letter-spacing:-.02em;margin:14px 0 4px}
+.lesson-lab{text-align:center;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.rw{position:relative;height:46px;margin:22px 0 4px}
+.rw::before{content:'';position:absolute;left:15px;right:15px;top:50%;height:2px;background:var(--ink);transform:translateY(-50%)}
+.rticks{position:absolute;left:15px;right:15px;top:50%;display:flex;justify-content:space-between;align-items:center;transform:translateY(-50%);pointer-events:none}
+.rticks i{display:block;width:2px;height:12px;background:var(--ink);margin:0 -1px}
+.rticks i.z{height:28px;background:var(--red)}
+.range{-webkit-appearance:none;appearance:none;position:absolute;inset:0;width:100%;height:100%;margin:0;background:transparent;outline:0}
+.range::-webkit-slider-runnable-track{background:transparent;height:46px}
+.range::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;margin-top:8px;background:var(--red);border:3px solid var(--ink);border-radius:0;box-shadow:inset 0 0 0 3px var(--paper)}
+.range::-moz-range-track{background:transparent;height:46px}
+.range::-moz-range-thumb{width:24px;height:24px;background:var(--red);border:3px solid var(--ink);border-radius:0;box-shadow:inset 0 0 0 3px var(--paper)}
+.ticks{display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:var(--mute)}
+.presets{justify-content:center;margin-top:18px}
+pre.code{background:var(--paper2);border:1px solid var(--ink);padding:12px;font:inherit;font-size:12px;line-height:1.45;overflow:auto;margin:10px 0;white-space:pre}
+details{margin-top:14px;border:2px solid var(--ink);padding:10px 12px}
+details summary{font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}
+details ol{margin:10px 0 0;padding-left:20px;font-size:13px;line-height:1.6}
+details p{font-size:13px;margin-top:10px}
+.namefield{display:flex;align-items:flex-end;gap:14px;border-bottom:2px dotted var(--ink);padding:6px 0 8px;margin:10px 0 12px}
+.namefield .lab{color:var(--red);padding-bottom:6px}
+.nf-v{flex:1;min-width:0;font-family:var(--disp);font-size:clamp(34px,10vw,52px);line-height:1;color:var(--ink);overflow-wrap:anywhere}
+.lrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--rule2)}
+.lrow.static{cursor:default}
+.lrow:not(.static):hover{background:var(--paper2)}
+.lrow .grow{flex:1;min-width:0}
+.lrow b{display:block;font-size:15px}
+.lrow small{color:var(--mute);font-size:12px}
+.pts{min-width:46px;text-align:right;font-family:var(--disp);font-size:24px;line-height:1}
+.tools{display:flex;flex-wrap:wrap;gap:10px}
+.cmpt{width:100%;border-collapse:collapse;font-size:14px}
+.cmpt th{font-family:var(--disp);font-weight:400;font-size:18px;color:var(--ink);text-align:center;padding:6px 6px 8px;border-bottom:2px solid var(--ink)}
+.cmpt td{text-align:center;padding:8px 6px;border-bottom:1px solid var(--rule2)}
+.cmpt td:first-child{text-align:left;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.cmpt td.best{color:var(--red);font-weight:700;text-decoration:underline}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:center;margin:8px 0 14px;font-size:13px;font-weight:700}
+.legend i{display:inline-block;width:22px;height:0;border-top:3px solid;vertical-align:middle;margin-right:7px}
+.winner{font-family:var(--disp);font-size:clamp(22px,6vw,30px);line-height:1.1;color:var(--ink);margin:6px 0 14px}
+#toast{position:fixed;left:16px;right:16px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:300;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{max-width:420px;padding:10px 14px;font-size:13px;font-weight:700;color:var(--paper);background:var(--ink);border-left:6px solid var(--red);animation:toastIn .25s var(--ease) backwards}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}}
+.stampPop{position:fixed;inset:0;z-index:250;display:grid;place-items:center;pointer-events:none}
+.stampPop span{font-family:var(--disp);font-size:clamp(48px,16vw,100px);line-height:1;text-transform:uppercase;letter-spacing:.03em;color:var(--red);border:6px solid var(--red);outline:3px solid var(--red);outline-offset:6px;padding:.08em .28em;transform:rotate(-9deg);animation:stampIn 1.3s var(--ease) both}
+@keyframes stampIn{0%{opacity:0;transform:rotate(-9deg) scale(2)}16%{opacity:.95;transform:rotate(-9deg) scale(1)}80%{opacity:.95;transform:rotate(-9deg) scale(1)}100%{opacity:0;transform:rotate(-9deg) scale(1.03)}}
+@media(max-width:380px){.brand{font-size:20px}.hact{gap:6px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="holes" aria-hidden="true"><i></i><i></i></div>
+
+<header class="top"><div class="wrap">
+  <div class="brand">Lehrer-Check<svg class="tickm" viewBox="0 0 40 34" aria-hidden="true"><path pathLength="1" d="M3 19 14 30C18 18 28 8 38 3"/></svg></div>
+  <div class="hact">
+    <button class="stat" id="modeBtn" data-act="settings" data-mode="local"><i></i><span id="modeTxt">Lokal</span></button>
+    <button class="btn sm primary" id="addBtn" data-act="add-teacher">+ Lehrer</button>
+  </div>
+</div></header>
+
+<main class="wrap" id="app">
+  <div class="banner" id="banner" hidden></div>
+  <div id="view" class="view"></div>
+</main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-act="tab" data-tab="teachers" class="on"><i>1</i>Lehrer</button>
+  <button data-act="tab" data-tab="stats"><i>2</i>Auswertung</button>
+  <button data-act="tab" data-tab="compare"><i>3</i>Vergleich</button>
+  <button data-act="tab" data-tab="me"><i>4</i>Ich</button>
+</nav>
+
+<div id="sheet-root"></div>
+<div id="toast"></div>
+<noscript><p style="padding:20px">Bitte JavaScript aktivieren.</p></noscript>
+
+<script type="module">
+/* ============================================================
+   KONFIGURATION
+   Optional: Firebase-Config hier fest eintragen, z. B.
+   const FIREBASE_CONFIG = { apiKey:"…", authDomain:"…", projectId:"…", appId:"…" };
+   Alternativ in der App: Status oben rechts → Verbindung → Config einfügen.
+   ============================================================ */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCG91gVFcNerMhDUbiCyQh8VBxN1tnljnA",
+  authDomain: "lehererschrck.firebaseapp.com",
+  projectId: "lehererschrck",
+  storageBucket: "lehererschrck.firebasestorage.app",
+  messagingSenderId: "355339313897",
+  appId: "1:355339313897:web:5f02ddd2546f7d65bb8678"
+};
+const FB_VERSION = '10.12.2';
+const LESSON_W = 0.10;   // Anteil der Stunden-Punkte an der Gesamtnote (10 %)
+const INK = '#1b2a6b', RED = '#bd3022', GRAPH = '#26251f';
+
+/* ---------- Kriterien (Reihenfolge = Reihenfolge im Radar) ---------- */
+const CRIT = [
+  {key:'f', no:1, name:'Freundlichkeit',          short:'Freundlich',  hint:'Wie nett und respektvoll ist er/sie zu euch?'},
+  {key:'h', no:2, name:'Hilfsbereitschaft',       short:'Hilfsbereit', hint:'Wie geht er/sie mit Fragen und Problemen um, auch mit „dummen“?'},
+  {key:'b', no:3, name:'Beibringungskraft',       short:'Erklärt',     hint:'Wie gut versteht man den Stoff nach dem Unterricht?'},
+  {key:'u', no:4, name:'Unterrichtsgestaltung',   short:'Gestaltung',  hint:'Ist der Unterricht abwechslungsreich und interessant?'},
+  {key:'a', no:5, name:'Anpassung an die Klasse', short:'Anpassung',   hint:'Geht er/sie auf Tempo und Niveau der Klasse ein?'},
+  {key:'p', no:6, name:'Prüfungen & Benotung',    short:'Prüfungen',   hint:'Passen die Tests zum Stoff und sind die Noten nachvollziehbar?'},
+  {key:'g', no:7, name:'Gerechtigkeit',           short:'Fairness',    hint:'Fair bei Strafen und im Umgang mit allen?'}
+];
+const LABELS = ['','Katastrophal','Schwach','Okay','Gut','Mega'];
+const TAGS = [
+  {id:'humor',label:'humorvoll'},{id:'streng',label:'streng'},{id:'chaos',label:'chaotisch'},
+  {id:'anschaulich',label:'erklärt anschaulich'},{id:'hausi',label:'viele Hausaufgaben'},{id:'locker',label:'lockerer Unterricht'},
+  {id:'schlaf',label:'einschläfernd'},{id:'puenktlich',label:'pünktlich'},{id:'zeit',label:'nimmt sich Zeit'},
+  {id:'fordernd',label:'fordernd'},{id:'buch',label:'nur Buch & Folien'},{id:'laut',label:'laut'}
+];
+const TAG_MAX = 4;
+const SUGGEST = ['Mathe','Deutsch','Englisch','Physik','Chemie','Biologie','Geschichte','Geographie','Sport','Kunst','Musik','Informatik','Religion','Ethik','Französisch','Latein','Spanisch','Sozialkunde','Wirtschaft'];
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- Handgezeichnete Formen ---------- */
+const CROWN = '<svg class="crown" viewBox="0 0 22 14" aria-hidden="true"><path d="M1.5 12.5 3 3.2 8 8 11 1.5 14 8 19 3.2 20.5 12.5Z"/></svg>';
+const RING  = '<svg class="ring" viewBox="0 0 100 100" aria-hidden="true"><path pathLength="1" d="M52 5C78 3 96 24 95 51 94 77 74 96 47 95 21 94 4 75 6 48 8 22 29 7 57 9 64 10 69 12 73 16"/></svg>';
+const UL    = '<svg class="ul" viewBox="0 0 300 14" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1" d="M2 9C40 3 80 12 120 7 170 2 220 11 298 5"/></svg>';
+
+/* ---------- Helfer ---------- */
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mean = a=>a.length? a.reduce((x,y)=>x+y,0)/a.length : null;
+const stdev = a=>{ if(a.length<2) return 0; const m=mean(a); return Math.sqrt(mean(a.map(x=>(x-m)**2))); };
+const fmt = (n,d=1)=> (n==null||isNaN(n)) ? '–' : Number(n).toFixed(d).replace('.',',');
+const fmtPts = (v,d=0)=>{
+  if(v==null||isNaN(v)) return '–';
+  const r = d ? Number(v.toFixed(d)) : Math.round(v);
+  const s = Math.abs(r).toFixed(d).replace('.',',');
+  return r>0 ? '+'+s : r<0 ? '−'+s : '0';
+};
+const clamp = (n,a,b)=>Math.min(b,Math.max(a,n));
+const critVals = r=>CRIT.map(c=>Number(r[c.key])).filter(v=>v>0);
+const ovr = r=>mean(critVals(r))??0;
+const ts = r=>r.updatedAt||r.createdAt||0;
+const fmtDate = t=>new Date(t).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
+const fmtDay = d=>`${d.slice(8)}.${d.slice(5,7)}.${d.slice(2,4)}`;
+const dayKey = (d=new Date())=>{ const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
+const rid = ()=>'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const byName = (x,y)=>x.t.name.localeCompare(y.t.name,'de');
+const tagLabel = id=>TAGS.find(t=>t.id===id)?.label||id;
+const lessonColor = v=>v>0?INK:v<0?RED:GRAPH;
+const lessonLabel = v=> v<=-8?'Albtraum' : v<=-5?'Zäh' : v<=-2?'Naja' : v<=1?'Neutral' : v<=4?'Ganz gut' : v<=7?'Gute Stunde' : 'Mega-Stunde';
+const errMsg = e=>{ const c=String(e?.code||e?.message||'Fehler'); return c.includes('permission') ? 'Keine Berechtigung' : c; };
+const ls = {
+  get(k,d=null){ try{ const v=localStorage.getItem(k); return v===null?d:v; }catch{ return d; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch{} },
+  del(k){ try{ localStorage.removeItem(k); }catch{} }
+};
+const withTimeout = (p,ms=10000)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Zeitüberschreitung – bist du online?')),ms))]);
+
+/* ---------- Identität (lokal pro Gerät; in der Cloud = Firebase-Anonym-ID) ---------- */
+let UID = ls.get('lc_uid');
+if(!UID){
+  UID = (typeof crypto!=='undefined' && typeof crypto.randomUUID==='function') ? crypto.randomUUID() : 'u'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+  ls.set('lc_uid',UID);
+}
+let UNAME = ls.get('lc_name','') || '';
+let NAME_MSG = '';
+
+/* ---------- State ---------- */
+const S = {
+  teachers:[], ratings:[], lessons:[], A:new Map(),
+  tab:'teachers', q:'', subj:'Alle', sort:'overall', cmp:[],
+  cloud:false, mode:'local', ready:false, authed:false, err:'', boss:null,
+  _got:{t:false,r:false,l:false,b:false}
+};
+let SHEET = null, FORM = null, FORM_T = null, FORM_L = null, fb = null;
+
+const isBoss = ()=>S.cloud && !!S.boss && S.boss.uid===UID;
+const canManage = ()=>!S.cloud || isBoss();
+
+/* ---------- Auswertung ---------- */
+function computeAll(){
+  const rby=new Map(), lby=new Map();
+  S.teachers.forEach(t=>{ rby.set(t.id,[]); lby.set(t.id,[]); });
+  S.ratings.forEach(r=>{ if(rby.has(r.teacherId)) rby.get(r.teacherId).push(r); });
+  S.lessons.forEach(l=>{ if(lby.has(l.teacherId)) lby.get(l.teacherId).push(l); });
+  const A=new Map();
+  for(const t of S.teachers){
+    const rs=rby.get(t.id), n=rs.length, lsn=lby.get(t.id), ln=lsn.length;
+    const avg={};
+    CRIT.forEach(c=>{ const v=rs.map(r=>Number(r[c.key])).filter(x=>x>0); avg[c.key]=v.length?mean(v):null; });
+    const cv=CRIT.map(c=>avg[c.key]).filter(v=>v!=null);
+    const crit=cv.length?mean(cv):null;
+    const lavg=ln?mean(lsn.map(l=>Number(l.points)||0)):null;
+    const lstars=lavg==null?null:(lavg+10)/20*4+1;
+    const overall=(n&&crit!=null)?(lstars!=null?crit*(1-LESSON_W)+lstars*LESSON_W:crit):null;
+    const per=rs.map(ovr);
+    const dist=[0,0,0,0,0]; per.forEach(p=>{ dist[clamp(Math.round(p),1,5)-1]++; });
+    const rv=rs.filter(r=>typeof r.rec==='boolean');
+    const recN=rv.length, recYes=rv.filter(r=>r.rec).length;
+    const tags=new Map(); rs.forEach(r=>(r.tags||[]).forEach(id=>tags.set(id,(tags.get(id)||0)+1)));
+    A.set(t.id,{t,rs,n,avg,crit,overall,dist,std:stdev(per),ls:lsn,ln,lavg,lstars,recN,recPct:recN?recYes/recN*100:null,tags});
+  }
+  S.A=A;
+}
+function badgesFor(a){
+  if(a.n<3) return [];
+  const o=[], v=k=>a.avg[k];
+  if(v('f')>=4.3) o.push('Sonnenschein');
+  if(v('h')>=4.3) o.push('Immer da');
+  if(v('b')>=4.3) o.push('Erklärbär');
+  if(v('u')>=4.3) o.push('Show-Talent');
+  if(v('a')>=4.3) o.push('Klassen-Versteher');
+  if(v('p')>=4.3) o.push('Faire Tests');
+  if(v('g')>=4.3) o.push('Fairness-Champion');
+  if(a.overall>=4.3) o.push('Allrounder');
+  if(a.std>=1.1) o.push('Polarisierend');
+  return o;
+}
+const myRating = tid=>S.ratings.find(r=>r.teacherId===tid && r.userId===UID);
+const myLessonToday = tid=>S.lessons.find(l=>l.id===`${tid}_${UID}_${dayKey()}`);
+const allSubjects = ()=>[...new Set(S.teachers.flatMap(t=>t.subjects||[]))].sort((a,b)=>a.localeCompare(b,'de'));
+function subjectStats(){
+  const m=new Map();
+  for(const r of S.ratings){
+    const a=S.A.get(r.teacherId); if(!a) continue;
+    const subs=r.subject?[r.subject]:(a.t.subjects||[]);
+    subs.forEach(s=>{ if(!m.has(s)) m.set(s,[]); m.get(s).push(r); });
+  }
+  return [...m].map(([s,rs])=>({
+    s, n:rs.length, overall:mean(rs.map(ovr)),
+    avg:Object.fromEntries(CRIT.map(c=>[c.key,mean(rs.map(r=>Number(r[c.key])).filter(x=>x>0))]))
+  })).sort((a,b)=>b.overall-a.overall);
+}
+
+/* ---------- Mini-Komponenten ---------- */
+function initials(name){
+  const n=name.replace(/^(herr|frau|hr|fr|dr|prof)\.?\s+/i,'').trim();
+  const p=n.split(/\s+/).filter(Boolean);
+  if(!p.length) return '?';
+  return (p.length>1 ? p[0][0]+p[1][0] : p[0].slice(0,2)).toUpperCase();
+}
+const avatar = (name,size='')=>`<span class="av ${size}">${esc(initials(name))}</span>`;
+function boxes(v,cls=''){
+  const s=cls==='lg'?22:cls==='xs'?9:12, g=cls==='lg'?6:cls==='xs'?3:4;
+  const val=v==null?0:clamp(v,0,5);
+  const w=Math.floor(val)*(s+g)+(val-Math.floor(val))*s;
+  return `<span class="boxes ${cls}" style="--w:${w.toFixed(1)}px" role="img" aria-label="${fmt(v)} von 5"></span>`;
+}
+const title = (a,b)=>`<h2 class="vt">${a}${b?`<span class="l2">${b}</span>`:''}</h2>`;
+const emptyBlock = (t,x,b='')=>`<div class="empty"><h3>${t}</h3><p>${x}</p>${b}</div>`;
+function heatStyle(v){
+  if(v==null) return '';
+  if(v>=3) return `background:rgba(27,42,107,${(0.05+(v-3)/2*0.33).toFixed(2)})`;
+  return `background:rgba(189,48,34,${(0.08+(3-v)/2*0.30).toFixed(2)})`;
+}
+const critLabel = c=>`<span class="hno">${c.no}</span>${esc(c.name)}`;
+const hbar = (label,value,max,right)=>`<div class="hrow"><div class="hl">${label}</div><div class="hb"><i style="--w:${value==null?0:(value/max*100).toFixed(1)}%"></i></div><div class="hv">${right}</div></div>`;
+const crown = uid=>(S.boss&&S.boss.uid===uid)?CROWN:'';
+function columns(items,opts={}){
+  const m=Math.max(1,...items.map(i=>i.value));
+  return `<div class="cols ${opts.cls||''}">${items.map((i,k)=>`<div class="col"><div class="cb"><i style="--h:${(i.value/m*100).toFixed(1)}%;animation-delay:${k*.05}s"><b>${i.value}</b></i></div><div class="cl">${esc(i.label)}</div></div>`).join('')}</div>`;
+}
+function diverge(items){
+  return `<div class="dv">${items.map((i,k)=>`<div class="dvc"><div class="dvb ${i.value>=0?'up':'down'}" style="height:${(Math.abs(i.value)/10*50).toFixed(1)}%;background:${lessonColor(i.value)};animation-delay:${k*.04}s"></div></div>`).join('')}</div>
+  <div class="dvl">${items.map(i=>`<span>${fmtPts(i.value,1)}<br>${esc(i.label)}</span>`).join('')}</div>`;
+}
+function heat(rows){
+  return `<div class="heatwrap"><table class="heat"><thead><tr><th></th>${CRIT.map(c=>`<th>${c.no}<span>${c.short}</span></th>`).join('')}<th>Ø<span>Gesamt</span></th></tr></thead><tbody>${
+    rows.map(r=>`<tr><td class="hn">${esc(r.label)}<small>${r.n}</small></td>${r.vals.map(v=>`<td><span class="hc" style="${heatStyle(v)}">${fmt(v)}</span></td>`).join('')}<td><span class="hc strong" style="${heatStyle(r.overall)}">${fmt(r.overall)}</span></td></tr>`).join('')
+  }</tbody></table></div>`;
+}
+function radarSVG(series){
+  const N=CRIT.length, cx=190, cy=158, R=92;
+  const ang=CRIT.map((_,i)=>(-90+i*360/N)*Math.PI/180);
+  const pt=(i,v)=>[cx+Math.cos(ang[i])*R*(v/5), cy+Math.sin(ang[i])*R*(v/5)];
+  const P=a=>a.map(n=>n.toFixed(1)).join(',');
+  let s='<svg class="radar" viewBox="0 0 380 320" role="img" aria-label="Radar-Diagramm">';
+  for(let lv=1;lv<=5;lv++) s+=`<polygon points="${ang.map((_,i)=>P(pt(i,lv))).join(' ')}" class="rgrid"/>`;
+  ang.forEach((_,i)=>{ const [x,y]=pt(i,5); s+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" class="raxis"/>`; });
+  series.forEach((se,si)=>{
+    if(se.vals.every(v=>v==null)) return;
+    const vals=se.vals.map(v=>v==null?0:v);
+    s+=`<polygon points="${vals.map((v,i)=>P(pt(i,v))).join(' ')}" class="rpoly" style="fill:${se.color}22;stroke:${se.color};${se.dash?'stroke-dasharray:7 5;':''}animation-delay:${si*.1}s"/>`;
+    vals.forEach((v,i)=>{ const [x,y]=pt(i,v); s+=`<rect x="${(x-3.5).toFixed(1)}" y="${(y-3.5).toFixed(1)}" width="7" height="7" fill="${se.color}"/>`; });
+  });
+  CRIT.forEach((c,i)=>{
+    const co=Math.cos(ang[i]), si=Math.sin(ang[i]);
+    const lx=cx+co*(R+14), ly=cy+si*(R+14)+(si>.3?10:si<-.3?-2:4);
+    const an=co>.3?'start':co<-.3?'end':'middle';
+    s+=`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${an}" class="rlab">${c.no} ${c.short}</text>`;
+  });
+  return s+'</svg>';
+}
+function trendSVG(rs){
+  const sorted=[...rs].sort((a,b)=>ts(a)-ts(b));
+  let sum=0; const pts=sorted.map((r,i)=>{ sum+=ovr(r); return sum/(i+1); });
+  if(pts.length<2) return '';
+  const W=300,H=80,pad=8;
+  const x=i=>pad+(W-2*pad)*(i/(pts.length-1));
+  const y=v=>H-pad-(H-2*pad)*((v-1)/4);
+  const d=pts.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${INK}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function pointsLine(vals){
+  const W=300,H=110,pad=12,n=vals.length;
+  const x=i=>pad+(W-2*pad)*(i/(n-1));
+  const y=v=>pad+(H-2*pad)*(1-(v+10)/20);
+  let d='', pen=false, dots='';
+  vals.forEach((v,i)=>{
+    if(v==null){ pen=false; return; }
+    d+=`${pen?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `; pen=true;
+    dots+=`<rect x="${(x(i)-4.5).toFixed(1)}" y="${(y(v)-4.5).toFixed(1)}" width="9" height="9" fill="${lessonColor(v)}"/>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend" style="height:auto;max-height:170px"><line x1="${pad}" x2="${W-pad}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="${GRAPH}" stroke-opacity=".45" stroke-dasharray="4 4"/><path d="${d}" fill="none" stroke="${INK}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
+}
+function toast(msg){
+  const el=document.createElement('div'); el.className='toast'; el.textContent=msg;
+  $('#toast').appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(),300); },2800);
+}
+function stampPop(text){
+  const d=document.createElement('div'); d.className='stampPop'; d.innerHTML=`<span>${esc(text)}</span>`;
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(),1400);
+}
+
+/* ---------- Speicher: lokal ---------- */
+function lsLoad(){
+  try{
+    const d=JSON.parse(ls.get('lc_local_v1','null'));
+    if(d&&Array.isArray(d.teachers)&&Array.isArray(d.ratings)) return {teachers:d.teachers,ratings:d.ratings,lessons:Array.isArray(d.lessons)?d.lessons:[]};
+  }catch{}
+  return {teachers:[],ratings:[],lessons:[]};
+}
+const lsSave=()=>ls.set('lc_local_v1',JSON.stringify({teachers:S.teachers,ratings:S.ratings,lessons:S.lessons}));
+
+/* ---------- Speicher: Firebase ---------- */
+function parseCfg(txt){
+  if(!txt) return null;
+  try{ const j=JSON.parse(txt); if(j&&j.apiKey&&j.projectId) return j; }catch{}
+  const o={}; const re=/["']?([A-Za-z]+)["']?\s*:\s*["'`]([^"'`]+)["'`]/g; let m;
+  while((m=re.exec(txt))) o[m[1]]=m[2];
+  return (o.apiKey&&o.projectId)?o:null;
+}
+const getCfg=()=>FIREBASE_CONFIG||parseCfg(ls.get('lc_fbcfg'));
+
+function cloudErr(e){
+  const c=e&&(e.code||e.message)||'Unbekannter Fehler';
+  const cs=String(c);
+  if(cs.includes('operation-not-allowed')) return 'Anonyme Anmeldung ist in Firebase noch nicht aktiviert (Authentication → Sign-in method → Anonymous).';
+  if(cs.includes('unauthorized-domain')) return 'Diese Domain ist in Firebase nicht freigegeben (Authentication → Settings → Authorized domains).';
+  if(cs.includes('permission')) return 'Keine Berechtigung. Bitte die Firestore-Regeln prüfen (Status oben rechts → Verbindung).';
+  return 'Verbindungsproblem: '+cs;
+}
+async function startCloud(cfg){
+  S.mode='cloud'; S.ready=false; S.authed=false; S._got={t:false,r:false,l:false,b:false};
+  onData();
+  setTimeout(()=>{ if(!S.ready && S.cloud){ S.mode='error'; S.err='Keine Antwort von Firebase. Offline oder Konfiguration falsch?'; S.ready=true; onData(); } },12000);
+  try{
+    const base=`https://www.gstatic.com/firebasejs/${FB_VERSION}/`;
+    const [appM,fsM,authM]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-firestore.js'),import(base+'firebase-auth.js')]);
+    const app=appM.initializeApp(cfg);
+    const auth=authM.getAuth(app);
+    const cred=await authM.signInAnonymously(auth);
+    UID=cred.user.uid; S.authed=true;
+    const db=fsM.initializeFirestore(app,{experimentalAutoDetectLongPolling:true});
+    fb={db,...fsM};
+    const gotData=()=>{
+      if(S._got.t&&S._got.r&&S._got.l&&S._got.b){
+        const first=!S.ready; S.ready=true; S.mode='cloud'; S.err=''; onData();
+        if(first) ensureBoss();
+      } else onData();
+    };
+    const fail=e=>{ S.mode='error'; S.err=cloudErr(e); S.ready=true; onData(); };
+    fsM.onSnapshot(fsM.collection(db,'teachers'),snap=>{ S.teachers=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.t=true; gotData(); },fail);
+    fsM.onSnapshot(fsM.collection(db,'ratings'),snap=>{ S.ratings=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.r=true; gotData(); },fail);
+    fsM.onSnapshot(fsM.collection(db,'lessons'),snap=>{ S.lessons=snap.docs.map(d=>({id:d.id,...d.data()})); S._got.l=true; gotData(); },fail);
+    fsM.onSnapshot(fsM.doc(db,'meta','boss'),snap=>{ S.boss=snap.exists()?snap.data():null; S._got.b=true; gotData(); },fail);
+  }catch(e){
+    S.mode='error'; S.err=cloudErr(e); S.ready=true; onData();
+  }
+}
+function startLocal(){
+  const d=lsLoad(); S.teachers=d.teachers; S.ratings=d.ratings; S.lessons=d.lessons; S.mode='local'; S.ready=true; onData();
+}
+async function claimBoss(){
+  if(!fb) throw new Error('Keine Verbindung zu Firebase');
+  await withTimeout(fb.setDoc(fb.doc(fb.db,'meta','boss'),{uid:UID,name:'BOSS',createdAt:Date.now()}));
+}
+async function ensureBoss(){
+  if(!S.cloud||!S.ready||!UNAME) return;
+  if(UNAME.trim().toLowerCase()!=='boss') return;
+  if(!S.boss){
+    try{ await claimBoss(); UNAME='BOSS'; ls.set('lc_name','BOSS'); toast('Du bist jetzt BOSS'); }catch{}
+  } else if(S.boss.uid!==UID){
+    UNAME=''; ls.del('lc_name'); NAME_MSG='Der Name BOSS ist schon vergeben. Bitte wähle einen anderen.'; openSheet('name');
+  }
+}
+
+/* ---------- API ---------- */
+const needFb=()=>{ if(!fb) throw new Error('Keine Verbindung zu Firebase'); };
+const api={
+  async addTeacher(d){
+    const t={name:d.name,subjects:d.subjects,createdAt:Date.now(),createdBy:UID};
+    if(S.cloud){ needFb(); const ref=await withTimeout(fb.addDoc(fb.collection(fb.db,'teachers'),t)); return ref.id; }
+    t.id=rid(); S.teachers.push(t); lsSave(); onData(); return t.id;
+  },
+  async updateTeacher(id,d){
+    if(S.cloud){ needFb(); await withTimeout(fb.updateDoc(fb.doc(fb.db,'teachers',id),d)); return; }
+    const t=S.teachers.find(x=>x.id===id); if(t) Object.assign(t,d); lsSave(); onData();
+  },
+  async deleteTeacher(id){
+    if(S.cloud){
+      needFb();
+      const refs=[
+        ...S.ratings.filter(r=>r.teacherId===id).map(r=>fb.doc(fb.db,'ratings',r.id)),
+        ...S.lessons.filter(l=>l.teacherId===id).map(l=>fb.doc(fb.db,'lessons',l.id))
+      ];
+      for(let i=0;i<refs.length;i+=400){
+        const b=fb.writeBatch(fb.db);
+        refs.slice(i,i+400).forEach(r=>b.delete(r));
+        await withTimeout(b.commit(),20000);
+      }
+      await withTimeout(fb.deleteDoc(fb.doc(fb.db,'teachers',id)));
+      return;
+    }
+    S.teachers=S.teachers.filter(t=>t.id!==id);
+    S.ratings=S.ratings.filter(r=>r.teacherId!==id);
+    S.lessons=S.lessons.filter(l=>l.teacherId!==id);
+    lsSave(); onData();
+  },
+  async saveRating(tid,d){
+    const id=tid+'_'+UID, prev=S.ratings.find(r=>r.id===id), now=Date.now();
+    const r={teacherId:tid,userId:UID,userName:UNAME,tags:d.tags||[],rec:(typeof d.rec==='boolean')?d.rec:null,comment:d.comment||'',subject:d.subject||'',createdAt:prev?.createdAt||now,updatedAt:now};
+    CRIT.forEach(c=>{ r[c.key]=d[c.key]; });
+    if(S.cloud){ needFb(); await withTimeout(fb.setDoc(fb.doc(fb.db,'ratings',id),r)); return; }
+    const i=S.ratings.findIndex(x=>x.id===id); const row={id,...r};
+    if(i>=0) S.ratings[i]=row; else S.ratings.push(row);
+    lsSave(); onData();
+  },
+  async deleteRating(id){
+    if(S.cloud){ needFb(); await withTimeout(fb.deleteDoc(fb.doc(fb.db,'ratings',id))); return; }
+    S.ratings=S.ratings.filter(r=>r.id!==id); lsSave(); onData();
+  },
+  async saveLesson(tid,points){
+    const day=dayKey(), id=`${tid}_${UID}_${day}`, prev=S.lessons.find(l=>l.id===id), now=Date.now();
+    const l={teacherId:tid,userId:UID,userName:UNAME,points:clamp(Math.round(points),-10,10),day,createdAt:prev?.createdAt||now,updatedAt:now};
+    if(S.cloud){ needFb(); await withTimeout(fb.setDoc(fb.doc(fb.db,'lessons',id),l)); return; }
+    const i=S.lessons.findIndex(x=>x.id===id); const row={id,...l};
+    if(i>=0) S.lessons[i]=row; else S.lessons.push(row);
+    lsSave(); onData();
+  },
+  async deleteLesson(id){
+    if(S.cloud){ needFb(); await withTimeout(fb.deleteDoc(fb.doc(fb.db,'lessons',id))); return; }
+    S.lessons=S.lessons.filter(l=>l.id!==id); lsSave(); onData();
+  }
+};
+
+/* ---------- Demo-Daten (nur lokal) ---------- */
+function mulberry32(a){ return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function loadDemo(){
+  const rnd=mulberry32(42);
+  // Werte in Reihenfolge von CRIT: f, h, b, u, a, p, g
+  const T=[
+    {n:'Herr Müller',s:['Mathe','Physik'],p:[3.2,3.6,4.5,3.4,3.4,4.0,4.2],v:2.2,tg:['streng','fordernd','anschaulich']},
+    {n:'Frau Schneider',s:['Deutsch','Geschichte'],p:[4.6,4.4,3.9,4.3,4.2,4.1,4.4],v:2.0,tg:['humor','zeit','anschaulich']},
+    {n:'Herr Weber',s:['Englisch'],p:[4.2,4.3,4.7,4.6,4.5,3.9,3.8],v:2.0,tg:['humor','locker','anschaulich']},
+    {n:'Frau Fischer',s:['Chemie','Biologie'],p:[3.8,3.0,3.3,2.8,2.9,3.2,3.1],v:2.4,tg:['hausi','buch','schlaf']},
+    {n:'Herr Becker',s:['Sport'],p:[4.8,4.5,3.6,4.7,4.6,4.4,4.9],v:1.6,tg:['locker','humor','puenktlich']},
+    {n:'Frau Hoffmann',s:['Kunst','Musik'],p:[4.4,4.0,3.2,3.5,3.7,2.8,2.6],v:3.4,tg:['chaos','laut','humor']},
+    {n:'Herr Wagner',s:['Informatik'],p:[3.0,3.4,4.1,3.2,3.2,3.8,3.6],v:2.2,tg:['streng','fordernd','puenktlich']}
+  ];
+  const names=['LM','JS','AK','TB','NH','PW','SK','MR','EF','DL','CB','FG','OH','VK'];
+  const good=['Erklärt echt super und hat immer Geduld.','Man merkt, dass der Unterricht Spaß macht.','Sehr fair bei Tests und hilfsbereit.','Nimmt sich Zeit, wenn man was nicht versteht.'];
+  const mid=['Okay, aber manchmal etwas zu schnell.','Solider Unterricht, Tempo könnte angepasster sein.','Meistens fair, kommt aber auf die Tagesform an.'];
+  const bad=['Sehr straffes Tempo, kaum Zeit für Fragen.','Benotung wirkt manchmal willkürlich.','Schwer, dem Unterricht zu folgen.'];
+  const now=Date.now(), day=864e5;
+  T.forEach(def=>{
+    const id=rid();
+    S.teachers.push({id,name:def.n,subjects:def.s,createdAt:now-60*day,createdBy:'demo',demo:true});
+    const cnt=7+Math.floor(rnd()*7);
+    const pool=[...names].sort(()=>rnd()-.5).slice(0,cnt);
+    pool.forEach(u=>{
+      const val=p=>clamp(Math.round(p+(rnd()-.5)*def.v),1,5);
+      const r={id:id+'_demo-'+u,teacherId:id,userId:'demo-'+u,userName:u,demo:true};
+      CRIT.forEach((c,i)=>{ r[c.key]=val(def.p[i]); });
+      const o=ovr(r);
+      r.comment=rnd()<.45?(o>=4?good:o>=3?mid:bad)[Math.floor(rnd()*3)]:'';
+      r.subject=(def.s.length>1&&rnd()>.4)?def.s[Math.floor(rnd()*def.s.length)]:'';
+      const tgs=[]; def.tg.forEach(t=>{ if(rnd()<.4) tgs.push(t); }); r.tags=tgs.slice(0,TAG_MAX);
+      r.rec=rnd()<.85?(rnd()<(o-1.5)/3.2):null;
+      const t=now-rnd()*55*day; r.createdAt=t; r.updatedAt=t;
+      S.ratings.push(r);
+      const mood=(mean(def.p)-3)*5, days=3+Math.floor(rnd()*6), used=new Set();
+      for(let k=0;k<days;k++){
+        const off=Math.floor(rnd()*28); if(used.has(off)) continue; used.add(off);
+        const dt=new Date(now-off*day), dk=dayKey(dt);
+        const pts=clamp(Math.round(mood+(rnd()-.5)*(def.v*3.2)),-10,10);
+        S.lessons.push({id:`${id}_demo-${u}_${dk}`,teacherId:id,userId:'demo-'+u,userName:u,points:pts,day:dk,createdAt:dt.getTime(),updatedAt:dt.getTime(),demo:true});
+      }
+    });
+  });
+  lsSave(); onData();
+}
+function clearDemo(){
+  S.teachers=S.teachers.filter(t=>!t.demo); S.ratings=S.ratings.filter(r=>!r.demo); S.lessons=S.lessons.filter(l=>!l.demo);
+  lsSave(); onData();
+}
+
+/* ---------- Views ---------- */
+function teacherCard(a,i){
+  const t=a.t, mine=myRating(t.id);
+  const meta=[];
+  if(a.recPct!=null) meta.push(`<span class="mt">Empfehlung <b>${Math.round(a.recPct)} %</b></span>`);
+  if(a.ln) meta.push(`<span class="mt">Stunden <b style="color:${lessonColor(a.lavg)}">${fmtPts(a.lavg,1)}</b></span>`);
+  const bd=badgesFor(a).slice(0,3);
+  return `<article class="trow" data-act="open" data-id="${esc(t.id)}" style="--i:${Math.min(i,14)}">
+    <div class="tr-info"><span class="nr">Nr. ${String(i+1).padStart(2,'0')}</span><h3 class="tr-name"><span>${esc(t.name)}</span></h3><div class="tr-sub">${esc((t.subjects||[]).join(' · '))}</div></div>
+    <div class="grade">${a.n?`${RING}<b>${fmt(a.overall)}</b><small>von 5</small>`:'<b class="none">–</b><small>offen</small>'}</div>
+    <div class="tr-bars">${CRIT.map(c=>`<div class="ar"><i>${c.no}</i><span>${c.short}</span>${boxes(a.avg[c.key],'xs')}<em>${fmt(a.avg[c.key])}</em></div>`).join('')}</div>
+    <div class="tr-meta">${meta.join('')}${bd.map((b,k)=>`<span class="stamp s${k%3}">${esc(b)}</span>`).join('')}</div>
+    <div class="tr-foot"><span class="cnt">${a.n} Bewertung${a.n===1?'':'en'}</span><span class="${mine?'done':'cta'}">${mine?'bewertet':'Bewerten'}</span><button class="qbtn" data-act="lesson" data-id="${esc(t.id)}">Stunde</button></div>
+  </article>`;
+}
+function viewTeachers(){
+  const opts=[['overall','Beste Gesamtnote'],...CRIT.map(c=>[c.key,`${c.no} ${c.name}`]),['rec','Weiterempfehlung'],['lessons','Stunden-Punkte'],['n','Meiste Bewertungen'],['name','A bis Z']];
+  return `<h2 class="vt">Zeugnis<span class="l2">für <em>Lehrer${UL}</em></span></h2>
+  <p class="lede">Sieben Aufgaben pro Lehrer: Kästchen ankreuzen, Kommentar dazu, fertig. Pro Schultag gibt es zusätzlich Stunden-Punkte von −10 bis +10.</p>
+  <div class="toolbar">
+    <label class="search"><span class="lab">Suche</span><input id="q" type="search" placeholder="Name oder Fach" value="${esc(S.q)}" autocomplete="off"></label>
+    <select id="sort" class="sel" aria-label="Sortierung">${opts.map(([v,l])=>`<option value="${v}" ${S.sort===v?'selected':''}>${l}</option>`).join('')}</select>
+  </div>
+  <div class="chips scroll" id="chips"></div>
+  <div id="list"></div>`;
+}
+function renderChips(){
+  const el=$('#chips'); if(!el) return;
+  const subs=['Alle',...allSubjects()];
+  if(!subs.includes(S.subj)) S.subj='Alle';
+  el.innerHTML=subs.map(s=>`<button class="chip ${S.subj===s?'on':''}" data-act="subj" data-s="${esc(s)}">${esc(s)}</button>`).join('');
+}
+function renderList(anim=true){
+  const el=$('#list'); if(!el) return;
+  if(!S.ready){ el.className=''; el.innerHTML=emptyBlock('Moment …','Die Klassen-Datenbank wird verbunden.'); return; }
+  let arr=[...S.A.values()];
+  const q=S.q.trim().toLowerCase();
+  if(q) arr=arr.filter(a=>a.t.name.toLowerCase().includes(q)||(a.t.subjects||[]).some(s=>s.toLowerCase().includes(q)));
+  if(S.subj!=='Alle') arr=arr.filter(a=>(a.t.subjects||[]).includes(S.subj));
+  const key=S.sort;
+  const val=a=>key==='overall'?a.overall:key==='rec'?a.recPct:key==='lessons'?a.lavg:a.avg[key];
+  arr.sort((x,y)=>{
+    if(key==='name') return byName(x,y);
+    if(key==='n') return (y.n-x.n)||byName(x,y);
+    const vx=val(x), vy=val(y);
+    if(vx==null&&vy==null) return byName(x,y);
+    if(vx==null) return 1;
+    if(vy==null) return -1;
+    return (vy-vx)||(y.n-x.n);
+  });
+  if(!arr.length){
+    el.className='';
+    if(!S.teachers.length){
+      if(canManage()){
+        el.innerHTML=emptyBlock('Noch leer.','Der erste Lehrer fehlt noch. Danach kann die Klasse ankreuzen.',
+          `<div class="row2"><button class="btn primary" data-act="add-teacher">+ Lehrer hinzufügen</button>${!S.cloud?'<button class="btn" data-act="demo-load">Demo-Daten laden</button>':''}</div>`);
+      } else {
+        el.innerHTML=emptyBlock('Noch leer.', S.boss?'Der BOSS legt die Lehrer an. Schau später noch mal vorbei.':'Es gibt noch keinen BOSS. Wer sich beim Start „BOSS“ nennt, legt die Lehrer an (Ich, dann Ändern).');
+      }
+    } else {
+      el.innerHTML=emptyBlock('Nichts gefunden.','Probier eine andere Suche oder einen anderen Fach-Filter.');
+    }
+    return;
+  }
+  el.className='list'+(anim?'':' still');
+  el.innerHTML=arr.map((a,i)=>teacherCard(a,i)).join('');
+}
+
+function viewStats(){
+  const rs=S.ratings.filter(r=>S.A.has(r.teacherId));
+  if(!rs.length) return title('Auswertung')+emptyBlock('Noch nichts da.','Sobald die ersten Bewertungen eingegangen sind, erscheinen hier Diagramme, Bestenlisten und Randnotizen.',
+    '<button class="btn primary" data-act="tab" data-tab="teachers">Zu den Lehrern</button>');
+  const all=[...S.A.values()], rated=all.filter(a=>a.n>0);
+  const lessonsAll=S.lessons.filter(l=>S.A.has(l.teacherId));
+  const overall=mean(rs.map(ovr));
+  const users=new Set(rs.map(r=>r.userId)).size;
+  const critAvg=CRIT.map(c=>({c,v:mean(rs.map(r=>Number(r[c.key])).filter(x=>x>0))}));
+  const ca=critAvg.filter(x=>x.v!=null);
+  const dist=[0,0,0,0,0]; rs.forEach(r=>{ dist[clamp(Math.round(ovr(r)),1,5)-1]++; });
+  const pool=(()=>{ const q=rated.filter(a=>a.n>=2); return q.length>=3?q:rated; })();
+  const boards=CRIT.map(c=>{
+    const top=[...pool].filter(a=>a.avg[c.key]!=null).sort((x,y)=>(y.avg[c.key]-x.avg[c.key])||(y.n-x.n)).slice(0,3);
+    return `<div class="sec"><h3>${c.no} ${esc(c.name)}</h3>${top.map((a,i)=>`<div class="lb" data-act="open" data-id="${esc(a.t.id)}"><span class="medal">${i+1}</span><span class="lbn">${esc(a.t.name)}</span><span class="lbv">${fmt(a.avg[c.key])}</span></div>`).join('')||'<p class="note">Noch keine Daten.</p>'}</div>`;
+  }).join('');
+  const recPool=(()=>{ const q=rated.filter(a=>a.recN>=3); return q.length>=2?q:rated.filter(a=>a.recN>=1); })();
+  const recBoard=recPool.length?`<div class="sec"><h3>Weiterempfehlung</h3>${[...recPool].sort((x,y)=>(y.recPct-x.recPct)||(y.recN-x.recN)).slice(0,3).map((a,i)=>`<div class="lb" data-act="open" data-id="${esc(a.t.id)}"><span class="medal">${i+1}</span><span class="lbn">${esc(a.t.name)}</span><span class="lbv">${Math.round(a.recPct)} %</span></div>`).join('')}</div>`:'';
+  const subj=subjectStats();
+  const now=Date.now(), WK=7*864e5;
+  const weeks=Array(8).fill(0); rs.forEach(r=>{ const k=Math.floor((now-ts(r))/WK); if(k>=0&&k<8) weeks[k]++; });
+  const wk=weeks.map((v,i)=>({label:i===0?'jetzt':`-${i}W`,value:v})).reverse();
+
+  const wsum=Array(8).fill(0), wn=Array(8).fill(0);
+  lessonsAll.forEach(l=>{ const t=new Date(l.day+'T12:00:00').getTime(); const k=Math.floor((now-t)/WK); if(k>=0&&k<8){ wsum[k]+=Number(l.points)||0; wn[k]++; } });
+  const wavg=wsum.map((s,i)=>wn[i]?s/wn[i]:null).reverse();
+  const lAvgAll=mean(lessonsAll.map(l=>Number(l.points)||0));
+  const lp=all.filter(a=>a.ln>=2), lpool=lp.length?lp:all.filter(a=>a.ln>=1);
+  const lboard=[...lpool].sort((x,y)=>y.lavg-x.lavg).slice(0,3);
+  const lessonSec=lessonsAll.length?`<section class="blk"><h3>Stunden-Punkte</h3>
+  <div class="sgrid rev">
+    <div class="sec"><h3>Ø Punkte pro Woche</h3>${pointsLine(wavg)}<p class="note" style="margin-top:8px">${lessonsAll.length} Stunden-Bewertungen, Ø ${fmtPts(lAvgAll,1)} auf der Skala −10 bis +10.</p></div>
+    <div class="sec"><h3>Beste Stimmung im Unterricht</h3>${lboard.map((a,i)=>`<div class="lb" data-act="open" data-id="${esc(a.t.id)}"><span class="medal">${i+1}</span><span class="lbn">${esc(a.t.name)} <small>${a.ln} Std.</small></span><span class="lbv" style="color:${lessonColor(a.lavg)}">${fmtPts(a.lavg,1)}</span></div>`).join('')}</div>
+  </div></section>`:'';
+
+  const tc=new Map(); rs.forEach(r=>(r.tags||[]).forEach(id=>tc.set(id,(tc.get(id)||0)+1)));
+  const tagList=[...tc].sort((a,b)=>b[1]-a[1]).slice(0,12);
+  const tagSec=tagList.length?`<section class="blk"><h3>Beliebteste Tags</h3><div class="chips">${tagList.map(([id,n])=>`<span class="chip sm" style="color:var(--gr)">${esc(tagLabel(id))} · ${n}×</span>`).join('')}</div></section>`:'';
+
+  const facts=[];
+  const most=[...rated].sort((a,b)=>b.n-a.n)[0];
+  if(most) facts.push(['Meistbewertet',`${esc(most.t.name)} mit ${most.n} Bewertung${most.n===1?'':'en'}`]);
+  const pol=rated.filter(a=>a.n>=3).sort((a,b)=>b.std-a.std)[0];
+  if(pol&&pol.std>=0.6) facts.push(['Polarisierend',`Bei ${esc(pol.t.name)} gehen die Meinungen am weitesten auseinander`]);
+  const gap=rated.filter(a=>a.n>=2).map(a=>{
+    const v=CRIT.map(c=>({c,v:a.avg[c.key]})).filter(x=>x.v!=null).sort((x,y)=>y.v-x.v);
+    return v.length>1?{a,hi:v[0],lo:v[v.length-1],d:v[0].v-v[v.length-1].v}:null;
+  }).filter(Boolean).sort((x,y)=>y.d-x.d)[0];
+  if(gap&&gap.d>=0.5) facts.push(['Größtes Gefälle',`${esc(gap.a.t.name)}: ${gap.hi.c.short} ${fmt(gap.hi.v)}, aber ${gap.lo.c.short} ${fmt(gap.lo.v)}`]);
+  if(ca.length>1){
+    const cs=[...ca].sort((a,b)=>a.v-b.v);
+    facts.push(['Größte Baustelle',`Am kritischsten bewertet: ${cs[0].c.name} (Ø ${fmt(cs[0].v)})`]);
+    facts.push(['Größte Stärke',`Am besten bewertet: ${cs[cs.length-1].c.name} (Ø ${fmt(cs[cs.length-1].v)})`]);
+  }
+  if(subj.length) facts.push(['Bester Fach-Schnitt',`${esc(subj[0].s)} (Ø ${fmt(subj[0].overall)})`]);
+  const since=now-30*864e5, mm=new Map();
+  rs.filter(r=>ts(r)>=since).forEach(r=>{ if(!mm.has(r.teacherId)) mm.set(r.teacherId,[]); mm.get(r.teacherId).push(ovr(r)); });
+  const mbest=[...mm].filter(([,v])=>v.length>=2).map(([id,v])=>({t:S.A.get(id).t,v:mean(v),n:v.length})).sort((a,b)=>b.v-a.v)[0];
+  if(mbest) facts.push(['Lehrer des Monats',`${esc(mbest.t.name)} (Ø ${fmt(mbest.v)} in den letzten 30 Tagen)`]);
+  const mood=all.filter(a=>a.ln>=3).sort((a,b)=>b.lavg-a.lavg)[0];
+  if(mood) facts.push(['Stimmungsmacher',`${esc(mood.t.name)} (Ø ${fmtPts(mood.lavg,1)} Stunden-Punkte)`]);
+  if(tagList[0]) facts.push(['Meistvergebener Tag',`${esc(tagLabel(tagList[0][0]))} (${tagList[0][1]}×)`]);
+  facts.push(['Kommentare',`${rs.filter(r=>(r.comment||'').trim()).length} Kommentare insgesamt`]);
+
+  return `${title('Auswertung')}
+  <p class="lede">Alles, was die Klasse bisher angekreuzt hat.</p>
+  <div class="kpis">
+    <div class="kpi lead"><b>${fmt(overall)}</b><span>Ø Sterne über alle Kriterien</span></div>
+    <div class="kpi3">
+      <div class="kpi"><b>${S.teachers.length}</b><span>Lehrer</span></div>
+      <div class="kpi"><b>${rs.length}</b><span>Bewertungen</span></div>
+      <div class="kpi"><b>${users}</b><span>Bewerter</span></div>
+    </div>
+  </div>
+  <section class="blk"><div class="sgrid">
+    <div class="sec"><h3>Kriterien im Schnitt</h3>${critAvg.map(x=>hbar(critLabel(x.c),x.v,5,fmt(x.v))).join('')}</div>
+    <div class="sec"><h3>Verteilung der Gesamtnoten</h3>${columns(dist.map((v,i)=>({label:(i+1)+' von 5',value:v})))}</div>
+  </div></section>
+  <section class="blk"><h3>Bestenlisten</h3><div class="boards">${boards}${recBoard}</div></section>
+  ${lessonSec}
+  ${tagSec}
+  <section class="blk"><h3>Randnotizen</h3><div class="facts">${facts.map(f=>`<div class="fact"><b>${f[0]}</b><span>${f[1]}</span></div>`).join('')}</div></section>
+  <section class="blk"><h3>Fächer im Vergleich</h3>${subj.length?heat(subj.map(s=>({label:s.s,n:s.n,vals:CRIT.map(c=>s.avg[c.key]),overall:s.overall}))):'<p class="note">Noch keine Fach-Daten.</p>'}</section>
+  <section class="blk"><h3>Alle Lehrer im Überblick</h3>${heat([...rated].sort((a,b)=>b.overall-a.overall).map(a=>({label:a.t.name,n:a.n,vals:CRIT.map(c=>a.avg[c.key]),overall:a.overall})))}</section>
+  <section class="blk"><h3>Aktivität der letzten 8 Wochen</h3>${columns(wk,{cls:'sm'})}</section>`;
+}
+
+function viewCompare(){
+  S.cmp=S.cmp.filter(id=>S.A.has(id));
+  const list=[...S.A.values()].sort(byName);
+  if(!list.length) return title('Vergleich')+emptyBlock('Noch nichts zu vergleichen.','Sobald Lehrer angelegt sind und ein paar Bewertungen vorliegen, kannst du sie hier gegeneinander antreten lassen.',
+    canManage()?'<button class="btn primary" data-act="add-teacher">+ Lehrer hinzufügen</button>':'');
+  const COL=[INK,RED,GRAPH];
+  const chips=list.map(a=>`<button class="chip ${S.cmp.includes(a.t.id)?'on':''}" data-act="cmp-toggle" data-id="${esc(a.t.id)}">${esc(a.t.name)}</button>`).join('');
+  const sel=S.cmp.map(id=>S.A.get(id));
+  let body='';
+  if(!sel.length){
+    body=emptyBlock('Wähle bis zu drei.','Tippe oben auf Namen. Radar und Tabelle zeigen sie dann nebeneinander.');
+  } else {
+    const legend=`<div class="legend">${sel.map((a,i)=>`<span><i style="border-top-color:${COL[i]};${i===2?'border-top-style:dashed':''}"></i>${esc(a.t.name)}</span>`).join('')}</div>`;
+    const getv=(a,key)=>key==='overall'?a.overall:key==='rec'?a.recPct:key==='lessons'?a.lavg:a.avg[key];
+    const best=key=>{ const vs=sel.map(a=>getv(a,key)).filter(v=>v!=null); return vs.length?Math.max(...vs):null; };
+    const row=(label,key,f=v=>fmt(v))=>{ const b=best(key); return `<tr><td>${label}</td>${sel.map(a=>{ const v=getv(a,key); return `<td class="${sel.length>1&&v!=null&&v===b?'best':''}">${v==null?'–':f(v)}</td>`; }).join('')}</tr>`; };
+    const winner=sel.length>1?[...sel].filter(a=>a.n>0).sort((x,y)=>y.overall-x.overall)[0]:null;
+    body=`<div class="sec" style="margin-top:8px">${radarSVG(sel.map((a,i)=>({vals:CRIT.map(c=>a.avg[c.key]),color:COL[i],dash:i===2})))}${legend}
+      ${winner?`<div class="winner">${esc(winner.t.name)} liegt vorn, Ø ${fmt(winner.overall)}.</div>`:''}
+      <table class="cmpt"><thead><tr><th></th>${sel.map(a=>`<th>${esc(a.t.name)}</th>`).join('')}</tr></thead><tbody>
+        ${CRIT.map(c=>row(`${c.no} ${c.short}`,c.key)).join('')}
+        ${row('Gesamt','overall')}
+        ${row('Empfehlung','rec',v=>Math.round(v)+' %')}
+        ${row('Stunden','lessons',v=>fmtPts(v,1))}
+        <tr><td>Bewertungen</td>${sel.map(a=>`<td>${a.n}</td>`).join('')}</tr>
+      </tbody></table></div>`;
+  }
+  return `${title('Vergleich')}<div class="chips" style="margin:16px 0 8px">${chips}</div>${body}`;
+}
+
+function viewMe(){
+  const mine=S.ratings.filter(r=>r.userId===UID&&S.A.has(r.teacherId)).sort((x,y)=>ts(y)-ts(x));
+  const done=new Set(mine.map(r=>r.teacherId));
+  const todo=[...S.A.values()].filter(a=>!done.has(a.t.id)).sort(byName);
+  const others=S.ratings.filter(r=>r.userId!==UID&&S.A.has(r.teacherId));
+  const myAvg=mean(mine.map(ovr)), clsAvg=mean(others.map(ovr));
+  const myLessons=S.lessons.filter(l=>l.userId===UID&&S.A.has(l.teacherId)).sort((x,y)=>y.day>x.day?1:y.day<x.day?-1:0);
+  let tag='';
+  if(mine.length>=2&&clsAvg!=null){ const d=myAvg-clsAvg; tag=d>=.4?'Du bewertest eher gnädig.':d<=-.4?'Du bewertest eher streng.':'Du bewertest ausgewogen.'; }
+  return `${title('Mein Heft')}
+  <div class="namefield"><span class="lab">Name</span><div class="nf-v">${esc(UNAME||'unbekannt')}${isBoss()?CROWN:''}</div><button class="btn sm" data-act="rename">Ändern</button></div>
+  <p class="lede">${isBoss()?'Du bist BOSS und verwaltest die Lehrerliste.':(tag||'Bewerte mindestens zwei Lehrer, dann steht hier, ob du eher streng oder gnädig bist.')}</p>
+  <div class="kpi3" style="border-top:2px solid var(--ink);margin-top:14px">
+    <div class="kpi"><b>${mine.length}</b><span>Bewertungen</span></div>
+    <div class="kpi"><b>${myLessons.length}</b><span>Stunden</span></div>
+    <div class="kpi"><b>${fmt(myAvg)}</b><span>Ø von dir</span></div>
+  </div>
+  ${todo.length?`<section class="blk"><h3>Noch nicht bewertet (${todo.length})</h3>${todo.map(a=>`<div class="lrow" data-act="rate" data-id="${esc(a.t.id)}">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${esc((a.t.subjects||[]).join(', '))}</small></div><span class="cta">Bewerten</span></div>`).join('')}</section>`:''}
+  ${mine.length?`<section class="blk"><h3>Meine Bewertungen</h3>${mine.map(r=>{ const a=S.A.get(r.teacherId); return `<div class="lrow" data-act="rate" data-id="${esc(a.t.id)}">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDate(ts(r))}${r.subject?' · '+esc(r.subject):''}</small></div>${boxes(ovr(r),'xs')}<span class="pts" style="font-size:20px">${fmt(ovr(r))}</span></div>`; }).join('')}</section>`:''}
+  ${myLessons.length?`<section class="blk"><h3>Meine Stunden (zuletzt)</h3>${myLessons.slice(0,8).map(l=>{ const a=S.A.get(l.teacherId); return `<div class="lrow static">${avatar(a.t.name)}<div class="grow"><b>${esc(a.t.name)}</b><small>${fmtDay(l.day)}</small></div><span class="pts" style="color:${lessonColor(l.points)}">${fmtPts(l.points)}</span></div>`; }).join('')}</section>`:''}
+  <section class="blk"><h3>Werkzeuge</h3><div class="tools">
+    <button class="btn" data-act="export">Bewertungen als CSV</button>
+    <button class="btn" data-act="export-lessons">Stunden als CSV</button>
+    <button class="btn" data-act="share">Link teilen</button>
+    <button class="btn" data-act="settings">Verbindung</button>
+    ${!S.cloud?(S.teachers.some(t=>t.demo)?'<button class="btn danger" data-act="demo-clear">Demo-Daten entfernen</button>':'<button class="btn" data-act="demo-load">Demo-Daten laden</button>'):''}
+  </div></section>`;
+}
+
+/* ---------- Sheets ---------- */
+const sheetHead=(t,act='close')=>`<div class="sh">${t?`<h2>${t}</h2>`:''}<button class="x" data-act="${act}">Schließen</button></div>`;
+
+function detailHTML(tid){
+  const a=S.A.get(tid); if(!a) return sheetHead('Nicht gefunden');
+  const t=a.t, mine=myRating(tid), manage=canManage();
+  const comments=a.rs.filter(r=>(r.comment||'').trim()).sort((x,y)=>ts(y)-ts(x));
+  const bd=badgesFor(a);
+  const subs=(t.subjects||[]).map(s=>{ const rs=a.rs.filter(r=>r.subject===s); return rs.length?{s,n:rs.length,v:mean(rs.map(ovr))}:null; }).filter(Boolean);
+  const tagList=[...a.tags].sort((x,y)=>y[1]-x[1]).slice(0,8);
+  const byDay=new Map(); a.ls.forEach(l=>{ if(!byDay.has(l.day)) byDay.set(l.day,[]); byDay.get(l.day).push(Number(l.points)||0); });
+  const dayItems=[...byDay].sort((x,y)=>x[0]>y[0]?1:-1).slice(-14).map(([d,v])=>({label:d.slice(8)+'.'+d.slice(5,7),value:mean(v)}));
+  const lUsers=new Set(a.ls.map(l=>l.userId)).size;
+  const lessonBlock=a.ln?`<div class="d-sec"><h4>Stunden-Punkte</h4>
+      <p class="note">Ø <b style="color:${lessonColor(a.lavg)}">${fmtPts(a.lavg,1)}</b> aus ${a.ln} Stunden-Bewertung${a.ln===1?'':'en'} von ${lUsers} Schüler${lUsers===1?'':'n'}. Zählt ${Math.round(LESSON_W*100)} % der Gesamtnote.</p>
+      ${diverge(dayItems)}</div>`
+    :`<div class="d-sec"><h4>Stunden-Punkte</h4><p class="note">Noch keine Stunde bewertet. Unten auf „Stunde“ tippen und der heutigen Stunde −10 bis +10 Punkte geben.</p></div>`;
+  let body;
+  if(!a.n){
+    body=`<div class="empty" style="margin-top:6px"><h3>Noch leer.</h3><p>Sei der Erste und bewerte ${esc(t.name)}.</p></div>${lessonBlock}`;
+  } else {
+    body=`<div class="d-score"><div class="grade big">${RING}<b>${fmt(a.overall)}</b><small>von 5</small></div><div class="ds-r">${boxes(a.overall,'lg')}<div class="cnt" style="margin:0">${a.n} Bewertung${a.n===1?'':'en'}</div></div></div>
+    ${(bd.length||a.recPct!=null)?`<div class="badges-row">${a.recPct!=null?`<span class="stamp s1">${Math.round(a.recPct)} % empfehlen (${a.recN})</span>`:''}${bd.map((b,k)=>`<span class="stamp s${k%3===1?2:k%3}">${esc(b)}</span>`).join('')}</div>`:''}
+    ${tagList.length?`<div class="d-sec"><h4>Tags</h4><div class="chips">${tagList.map(([id,n])=>`<span class="chip sm" style="color:var(--gr)">${esc(tagLabel(id))} · ${n}×</span>`).join('')}</div></div>`:''}
+    <div class="d-sec"><h4>Profil</h4>${radarSVG([{vals:CRIT.map(c=>a.avg[c.key]),color:INK}])}</div>
+    <div class="d-sec"><h4>Aufgaben im Einzelnen</h4>${CRIT.map(c=>hbar(critLabel(c),a.avg[c.key],5,fmt(a.avg[c.key]))).join('')}</div>
+    ${lessonBlock}
+    <div class="d-sec"><h4>Verteilung der Gesamtnoten</h4>${columns(a.dist.map((v,i)=>({label:(i+1)+'/5',value:v})),{cls:'sm'})}</div>
+    ${a.n>=3?`<div class="d-sec"><h4>Entwicklung (laufender Schnitt)</h4>${trendSVG(a.rs)}</div>`:''}
+    ${subs.length>1?`<div class="d-sec"><h4>Nach Fach</h4>${subs.map(s=>hbar(esc(s.s),s.v,5,fmt(s.v))).join('')}</div>`:''}
+    ${comments.length?`<div class="d-sec"><h4>Randbemerkungen (${comments.length})</h4>${comments.map(r=>`<div class="cm ${r.userId===UID?'mine':''}"><div class="cm-h"><b>${esc(r.userName||'?')}${crown(r.userId)}</b><span>${fmtDate(ts(r))}</span>${r.subject?`<span class="tag">${esc(r.subject)}</span>`:''}${boxes(ovr(r),'xs')}</div><p>${esc(r.comment)}</p></div>`).join('')}</div>`:''}`;
+  }
+  return `${sheetHead('')}
+  <div class="d-hero">${avatar(t.name,'lg')}<div><h2 class="d-name">${esc(t.name)}</h2><div class="chips">${(t.subjects||[]).map(s=>`<span class="chip sm">${esc(s)}</span>`).join('')}</div></div></div>
+  ${body}
+  ${manage?`<div class="mgmt"><button class="lnk" style="margin:0" data-act="edit-teacher" data-id="${esc(t.id)}">Bearbeiten</button><button class="lnk danger" style="margin:0" data-act="del-teacher" data-id="${esc(t.id)}">Lehrer löschen</button></div>`:''}
+  <div class="d-actions"><button class="btn primary" data-act="rate" data-id="${esc(t.id)}">${mine?'Bewertung ändern':'Jetzt bewerten'}</button><button class="btn ic" data-act="lesson" data-id="${esc(t.id)}">Stunde</button><button class="btn ic" data-act="cmp-add" data-id="${esc(t.id)}">Vergleich</button></div>`;
+}
+
+function rateHTML(tid){
+  const a=S.A.get(tid); if(!a) return sheetHead('Nicht gefunden');
+  const t=a.t, F=FORM, mine=myRating(tid);
+  const subs=t.subjects||[];
+  return `${sheetHead(`${esc(t.name)} bewerten`,'rate-cancel')}
+  <p class="sub">Tippe pro Aufgabe auf das Kästchen. Deine Bewertung erscheint mit deinem Namen („${esc(UNAME)}“).</p>
+  ${CRIT.map(c=>`<div class="rate-row">
+    <div class="rr-head"><b><span class="no">${c.no}</span>${esc(c.name)}</b><span class="rr-txt" id="rt-${c.key}">${LABELS[F[c.key]]||'offen'}</span></div>
+    <p class="hint">${esc(c.hint)}</p>
+    <div class="starsel">${[1,2,3,4,5].map(v=>`<button type="button" class="st ${F[c.key]>=v?'on':''}" data-act="star" data-k="${c.key}" data-v="${v}" aria-label="${v} von 5">${v}</button>`).join('')}</div>
+  </div>`).join('')}
+  <label class="lbl">Weiterempfehlen? (optional)</label>
+  <div class="recrow"><button type="button" class="btn ${F.rec===true?'on':''}" data-act="rec" data-v="yes">Ja</button><button type="button" class="btn no ${F.rec===false?'on':''}" data-act="rec" data-v="no">Nein</button></div>
+  <label class="lbl">Tags (optional, höchstens ${TAG_MAX})</label>
+  <div class="chips wrapc">${TAGS.map(tg=>`<button type="button" class="chip ${F.tags.includes(tg.id)?'on':''}" data-act="tag" data-id="${tg.id}">${esc(tg.label)}</button>`).join('')}</div>
+  ${subs.length>1?`<label class="lbl">Für welches Fach? (optional)</label><select id="subjectSel" class="inp"><option value="">Allgemein</option>${subs.map(s=>`<option value="${esc(s)}" ${F.subject===s?'selected':''}>${esc(s)}</option>`).join('')}</select>`:''}
+  <label class="lbl">Randbemerkung (optional)</label>
+  <textarea id="comment" class="inp" maxlength="300" placeholder="Was war gut? Was könnte besser sein? Bleib fair und sachlich.">${esc(F.comment)}</textarea>
+  <div class="cc"><span id="ccount">${(F.comment||'').length}</span>/300</div>
+  ${mine?'<div class="mgmt"><button class="lnk danger" style="margin:0" data-act="del-rating">Meine Bewertung löschen</button></div>':''}
+  <div class="d-actions"><button class="btn primary" id="saveBtn" data-act="save-rating" ${CRIT.every(c=>F[c.key])?'':'disabled'}>Speichern</button></div>`;
+}
+
+function lessonHTML(){
+  const a=S.A.get(FORM_L.tid); if(!a) return sheetHead('Nicht gefunden');
+  const ex=myLessonToday(a.t.id), v=FORM_L.points;
+  const mineAll=a.ls.filter(l=>l.userId===UID);
+  return `${sheetHead('Stunde bewerten','lesson-back')}
+  <p class="sub">Wie war die heutige Stunde bei <b>${esc(a.t.name)}</b>? −10 ist furchtbar, +10 ist grandios. Einmal pro Tag und Lehrer, bis Tagesende änderbar. Die Stunden-Punkte zählen ${Math.round(LESSON_W*100)} % der Gesamtnote.</p>
+  <div class="lesson-val" id="lVal" style="color:${lessonColor(v)}">${fmtPts(v)}</div>
+  <div class="lesson-lab" id="lLab">${lessonLabel(v)}</div>
+  <div class="rw"><div class="rticks">${Array.from({length:21},(_,i)=>`<i class="${i===10?'z':''}"></i>`).join('')}</div><input type="range" class="range" id="lRange" min="-10" max="10" step="1" value="${v}" aria-label="Stunden-Punkte"></div>
+  <div class="ticks"><span>−10</span><span>0</span><span>+10</span></div>
+  <div class="chips presets">${[-10,-5,0,5,10].map(x=>`<button class="chip" data-act="lpreset" data-v="${x}">${fmtPts(x)}</button>`).join('')}</div>
+  ${mineAll.length?`<p class="sub" style="text-align:center;margin:16px 0 0">Bisher ${mineAll.length} Stunde${mineAll.length===1?'':'n'} von dir, Ø ${fmtPts(mean(mineAll.map(l=>Number(l.points)||0)),1)}</p>`:''}
+  ${ex?'<div class="mgmt" style="justify-content:center"><button class="lnk danger" style="margin:0" data-act="del-lesson">Heutige Stunde löschen</button></div>':''}
+  <div class="d-actions"><button class="btn primary" data-act="save-lesson">${ex?'Änderung speichern':'Stunde speichern'}</button></div>`;
+}
+function updateLessonUI(){
+  const v=FORM_L.points;
+  const e=$('#lVal'); if(e){ e.textContent=fmtPts(v); e.style.color=lessonColor(v); }
+  const l=$('#lLab'); if(l) l.textContent=lessonLabel(v);
+  const r=$('#lRange'); if(r&&parseInt(r.value,10)!==v) r.value=v;
+}
+function lessonBack(){
+  if(FORM_L&&FORM_L.from==='detail'&&S.A.has(FORM_L.tid)) openSheet('detail',FORM_L.tid); else closeSheet();
+}
+
+function teacherFormHTML(){
+  const e=!!FORM_T.id;
+  return `${sheetHead(e?'Lehrer bearbeiten':'Neuer Lehrer')}
+  <label class="lbl">Name</label>
+  <input id="tName" class="inp" maxlength="60" placeholder="z. B. Herr Müller" value="${esc(FORM_T.name)}" autocomplete="off">
+  <label class="lbl">Fächer</label>
+  <div class="row"><input id="tSubj" class="inp" maxlength="30" placeholder="Fach eingeben, dann Enter" autocomplete="off"><button class="btn" data-act="subj-add">+</button></div>
+  <div id="tChips" class="chips" style="margin-top:12px"></div>
+  <div class="actions"><button class="btn ghost" data-act="close">Abbrechen</button><button class="btn primary" data-act="save-teacher">${e?'Speichern':'Hinzufügen'}</button></div>`;
+}
+function renderTChips(){
+  const el=$('#tChips'); if(!el) return;
+  const sel=FORM_T.subjects;
+  const sug=SUGGEST.filter(s=>!sel.some(x=>x.toLowerCase()===s.toLowerCase()));
+  el.innerHTML=sel.map(s=>`<button class="chip on" data-act="subj-del" data-s="${esc(s)}">${esc(s)} ×</button>`).join('')
+    +(sug.length?'<div class="sug-label">Vorschläge</div>':'')
+    +sug.map(s=>`<button class="chip" data-act="subj-sug" data-s="${esc(s)}">${esc(s)}</button>`).join('');
+}
+function addSubject(raw){
+  raw.split(',').map(s=>s.trim()).filter(Boolean).forEach(s=>{
+    const v=s.charAt(0).toUpperCase()+s.slice(1);
+    if(!FORM_T.subjects.some(x=>x.toLowerCase()===v.toLowerCase())) FORM_T.subjects.push(v);
+  });
+  renderTChips();
+}
+
+function nameHTML(){
+  const can=!!UNAME;
+  return `${can?sheetHead('Anzeigename'):'<h2 class="sh" style="font-family:var(--disp);font-weight:400;font-size:clamp(36px,11vw,56px);line-height:1;color:var(--ink);margin-bottom:8px;display:block">Willkommen.</h2>'}
+  <p class="sub">Wie sollen deine Bewertungen angezeigt werden? Nimm deinen Namen oder ein Kürzel, z. B. „LM“. Die Klasse sieht das bei deinen Randbemerkungen.${S.cloud?' Der Name „BOSS“ ist für den Verwalter der Lehrerliste reserviert: Wer ihn zuerst nimmt, wird BOSS.':''}</p>
+  ${NAME_MSG?`<p class="sub" style="color:var(--red);font-weight:700">${esc(NAME_MSG)}</p>`:''}
+  <input id="nameIn" class="inp" maxlength="20" placeholder="Name oder Kürzel" value="${esc(UNAME)}" autocomplete="off">
+  <div class="actions">${can?'<button class="btn ghost" data-act="close">Abbrechen</button>':''}<button class="btn primary" data-act="save-name">${can?'Speichern':'Los geht’s'}</button></div>`;
+}
+
+const RULES=`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function bossPath() { return /databases/$(database)/documents/meta/boss; }
+    function isBoss() {
+      return signedIn() && exists(bossPath())
+             && get(bossPath()).data.uid == request.auth.uid;
+    }
+    function stars(v) { return v is number && v >= 1 && v <= 5; }
+    function nameOk(d) {
+      return d.userName is string && d.userName.size() >= 2 && d.userName.size() <= 20
+             && (d.userName.lower() != 'boss' || isBoss());
+    }
+
+    // Wer zuerst "BOSS" claimt, bleibt BOSS (nur einmal anlegbar)
+    match /meta/boss {
+      allow read: if signedIn();
+      allow create: if signedIn()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.keys().hasOnly(['uid','name','createdAt']);
+      allow update, delete: if false;
+    }
+
+    // Lehrer: nur der BOSS darf anlegen, ändern, löschen
+    match /teachers/{id} {
+      allow read: if signedIn();
+      allow create, update: if isBoss()
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 60
+                    && request.resource.data.subjects is list;
+      allow delete: if isBoss();
+    }
+
+    // Bewertungen: jeder nur seine eigene
+    match /ratings/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && id == request.resource.data.teacherId + '_' + request.auth.uid
+                    && nameOk(request.resource.data)
+                    && stars(request.resource.data.f) && stars(request.resource.data.h)
+                    && stars(request.resource.data.b) && stars(request.resource.data.u)
+                    && stars(request.resource.data.a) && stars(request.resource.data.p)
+                    && stars(request.resource.data.g)
+                    && request.resource.data.comment is string
+                    && request.resource.data.comment.size() <= 300
+                    && request.resource.data.tags is list
+                    && request.resource.data.tags.size() <= 4;
+      allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isBoss());
+    }
+
+    // Stunden-Punkte: 1 Dokument pro Tag, Lehrer und Person
+    match /lessons/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.day is string
+                    && request.resource.data.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                    && id == request.resource.data.teacherId + '_' + request.auth.uid + '_' + request.resource.data.day
+                    && request.resource.data.points is number
+                    && request.resource.data.points >= -10 && request.resource.data.points <= 10
+                    && nameOk(request.resource.data);
+      allow delete: if signedIn() && (resource.data.userId == request.auth.uid || isBoss());
+    }
+  }
+}`;
+function settingsHTML(){
+  const cfg=getCfg();
+  const status=!S.cloud?'Lokaler Modus. Daten bleiben nur auf diesem Gerät, jeder darf Lehrer verwalten.'
+    :S.mode==='error'?`Achtung: ${esc(S.err)}`:`Live verbunden mit <b>${esc(cfg?.projectId||'')}</b>.`;
+  const boss=(!S.cloud||!S.ready||S.mode==='error')?'':S.boss?(S.boss.uid===UID?'<br>Du bist BOSS und verwaltest die Lehrer.':'<br>Der BOSS ist vergeben. Nur er verwaltet die Lehrer.'):'<br>Noch kein BOSS. Wer sich beim Start „BOSS“ nennt, wird BOSS.';
+  return `${sheetHead('Verbindung')}
+  <p class="sub">${status}${boss}</p>
+  ${FIREBASE_CONFIG?'<p class="sub">Die Konfiguration ist fest in der Datei eingetragen.</p>':`
+  <label class="lbl">Firebase-Config einfügen</label>
+  <textarea id="cfgIn" class="inp" placeholder='const firebaseConfig = { apiKey: "…", projectId: "…", … };'></textarea>
+  <div class="actions"><button class="btn primary" data-act="save-cfg">Verbinden</button>${cfg?'<button class="btn danger" data-act="reset-cfg">Trennen</button>':''}</div>`}
+  <details><summary>Anleitung: Firebase einrichten</summary><ol>
+    <li>Auf <b>console.firebase.google.com</b> ein Projekt erstellen (Analytics kann aus bleiben).</li>
+    <li><b>Build → Firestore Database → Datenbank erstellen</b> (Standort Europa, z. B. eur3).</li>
+    <li><b>Build → Authentication → Get started → Sign-in method → Anonymous</b> aktivieren und speichern.</li>
+    <li><b>Projekteinstellungen → Allgemein → Web-App (&lt;/&gt;)</b> hinzufügen und den <b>firebaseConfig</b>-Block kopieren.</li>
+    <li>Den Block oben einfügen und auf „Verbinden“ tippen.</li>
+    <li>Unter <b>Firestore → Regeln</b> die Regeln unten einfügen und veröffentlichen.</li>
+    <li>Die Datei online hosten (GitHub Pages, Netlify, Firebase Hosting). Falls die Anmeldung scheitert: unter <b>Authentication → Settings → Authorized domains</b> die Domain der Seite hinzufügen.</li>
+    <li><b>Als Erstes selbst die Seite öffnen und dich „BOSS“ nennen</b>, bevor du den Link teilst.</li>
+  </ol></details>
+  <details><summary>Firestore-Regeln (mit BOSS-Sperre)</summary><pre class="code">${esc(RULES)}</pre><button class="btn sm" data-act="copy-rules">Regeln kopieren</button></details>
+  <details><summary>BOSS zurücksetzen oder übertragen</summary><p>Der BOSS-Status hängt an der anonymen Anmeldung deines Browsers. Wenn du die Browserdaten löschst oder das Gerät wechselst, bist du nicht mehr BOSS. Zurücksetzen: in der Firebase-Konsole unter <b>Firestore → Daten → Sammlung „meta“</b> das Dokument <b>„boss“</b> löschen. Danach kann sich wieder jemand „BOSS“ nennen.</p></details>`;
+}
+
+function openSheet(type,id){
+  if((type==='detail'||type==='rate'||type==='lesson')&&!S.A.has(id)){ toast('Lehrer nicht gefunden'); return; }
+  const had=!!$('.sheet',$('#sheet-root'));
+  SHEET={type,id};
+  renderSheet(!had,false);
+  if(had) $('.sheet',$('#sheet-root')).scrollTop=0;
+}
+function renderSheet(first,still){
+  if(!SHEET) return;
+  const root=$('#sheet-root');
+  let inner='';
+  switch(SHEET.type){
+    case 'detail': inner=detailHTML(SHEET.id); break;
+    case 'rate': inner=rateHTML(SHEET.id); break;
+    case 'lesson': inner=lessonHTML(); break;
+    case 'teacher': inner=teacherFormHTML(); break;
+    case 'settings': inner=settingsHTML(); break;
+    case 'name': inner=nameHTML(); break;
+  }
+  const html=`<div class="si ${still?'still':''}">${inner}</div>`;
+  if(first||!$('.sheet',root)){
+    root.innerHTML=`<div class="backdrop" data-act="backdrop"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+    document.body.classList.add('lock');
+  } else {
+    $('.sheet',root).innerHTML=html;
+  }
+  if(SHEET.type==='teacher'){ renderTChips(); if(first) setTimeout(()=>$('#tName')?.focus(),350); }
+  if(SHEET.type==='name'&&first) setTimeout(()=>$('#nameIn')?.focus(),350);
+}
+function closeSheet(){
+  SHEET=null; $('#sheet-root').innerHTML=''; document.body.classList.remove('lock');
+}
+
+/* ---------- Render ---------- */
+function updateMode(){
+  const b=$('#modeBtn'); b.dataset.mode=S.mode;
+  $('#modeTxt').innerHTML=S.cloud?(S.mode==='error'?'Fehler':(!S.ready?'Verbinde':(isBoss()?'Live'+CROWN:'Live'))):'Lokal';
+  const ab=$('#addBtn'); if(ab) ab.hidden=!canManage();
+}
+function renderBanner(){
+  const b=$('#banner');
+  if(S.mode==='error'){ b.hidden=false; b.className='banner err'; b.innerHTML=`${esc(S.err||'Verbindungsproblem')} <button class="lnk" data-act="settings">Einstellungen</button>`; }
+  else if(!S.cloud){ b.hidden=false; b.className='banner'; b.innerHTML='Lokaler Modus: Bewertungen bleiben nur auf diesem Gerät. <button class="lnk" data-act="settings">Mit der Klasse verbinden</button>'; }
+  else if(S.ready&&!S.boss){ b.hidden=false; b.className='banner'; b.innerHTML='Noch kein BOSS. Wer sich „BOSS“ nennt, legt die Lehrer an (Ich, dann Ändern).'; }
+  else b.hidden=true;
+}
+function renderMain(anim=true){
+  const v=$('#view');
+  $$('#tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
+  v.className='view'+(anim?'':' still');
+  if(!S.ready){ v.innerHTML=title('Moment …')+emptyBlock('Verbinde.','Die Klassen-Datenbank wird geladen.'); return; }
+  const fn={teachers:viewTeachers,stats:viewStats,compare:viewCompare,me:viewMe}[S.tab];
+  v.innerHTML=fn();
+  if(S.tab==='teachers'){ renderChips(); renderList(anim); }
+}
+function refreshMain(){
+  if(S.tab==='teachers'&&S.ready&&$('#list')){ renderChips(); renderList(false); }
+  else renderMain(false);
+}
+function onData(){
+  computeAll(); updateMode(); renderBanner(); refreshMain();
+  if(SHEET&&SHEET.type==='detail'){ if(S.A.has(SHEET.id)) renderSheet(false,true); else closeSheet(); }
+}
+
+/* ---------- Aktionen ---------- */
+const H={
+  tab(el){ S.tab=el.dataset.tab; renderMain(true); window.scrollTo({top:0,behavior:'smooth'}); },
+  open(el){ openSheet('detail',el.dataset.id); },
+  close(){ closeSheet(); },
+  backdrop(el,e){ if(e.target!==el) return; if(SHEET&&SHEET.type==='name'&&!UNAME) return; closeSheet(); },
+  settings(){ openSheet('settings'); },
+  subj(el){ S.subj=el.dataset.s; renderChips(); renderList(true); },
+
+  'add-teacher'(){
+    if(!canManage()) return toast('Nur der BOSS darf Lehrer hinzufügen');
+    FORM_T={id:null,name:'',subjects:[]}; openSheet('teacher');
+  },
+  'edit-teacher'(el){
+    if(!canManage()) return toast('Nur der BOSS darf Lehrer bearbeiten');
+    const t=S.A.get(el.dataset.id)?.t; if(!t) return;
+    FORM_T={id:t.id,name:t.name,subjects:[...(t.subjects||[])]}; openSheet('teacher');
+  },
+  async 'del-teacher'(el){
+    if(!canManage()) return toast('Nur der BOSS darf Lehrer entfernen');
+    const a=S.A.get(el.dataset.id); if(!a) return;
+    if(!confirm(`„${a.t.name}“ mit allen ${a.n} Bewertungen und ${a.ln} Stunden-Punkten unwiderruflich löschen?`)) return;
+    try{ await api.deleteTeacher(a.t.id); closeSheet(); toast('Lehrer gelöscht'); }
+    catch(err){ toast('Löschen fehlgeschlagen: '+errMsg(err)); }
+  },
+  'subj-add'(){ const i=$('#tSubj'); if(i&&i.value.trim()){ addSubject(i.value); i.value=''; i.focus(); } },
+  'subj-sug'(el){ addSubject(el.dataset.s); },
+  'subj-del'(el){ FORM_T.subjects=FORM_T.subjects.filter(x=>x!==el.dataset.s); renderTChips(); },
+  async 'save-teacher'(el){
+    if(!canManage()) return toast('Nur der BOSS darf Lehrer verwalten');
+    const pending=$('#tSubj'); if(pending&&pending.value.trim()){ addSubject(pending.value); pending.value=''; }
+    const name=($('#tName').value||'').trim().replace(/\s+/g,' ');
+    if(name.length<2) return toast('Bitte einen Namen eingeben');
+    if(!FORM_T.subjects.length) return toast('Bitte mindestens ein Fach hinzufügen');
+    if(S.teachers.some(t=>t.id!==FORM_T.id&&t.name.toLowerCase()===name.toLowerCase())) return toast('Den Lehrer gibt es schon');
+    el.disabled=true;
+    try{
+      if(FORM_T.id) await api.updateTeacher(FORM_T.id,{name,subjects:FORM_T.subjects});
+      else await api.addTeacher({name,subjects:FORM_T.subjects});
+      closeSheet(); toast(FORM_T.id?'Gespeichert':'Lehrer hinzugefügt');
+    }catch(err){ el.disabled=false; toast('Speichern fehlgeschlagen: '+errMsg(err)); }
+  },
+
+  rate(el){
+    const tid=el.dataset.id, m=myRating(tid);
+    FORM={tid,tags:Array.isArray(m?.tags)?[...m.tags]:[],rec:typeof m?.rec==='boolean'?m.rec:null,comment:m?.comment||'',subject:m?.subject||''};
+    CRIT.forEach(c=>{ FORM[c.key]=Number(m?.[c.key])||0; });
+    openSheet('rate',tid);
+  },
+  'rate-cancel'(){ if(FORM&&S.A.has(FORM.tid)) openSheet('detail',FORM.tid); else closeSheet(); },
+  star(el){
+    const k=el.dataset.k, v=parseInt(el.dataset.v,10);
+    FORM[k]=v;
+    $$('.st',el.parentElement).forEach(b=>b.classList.toggle('on',parseInt(b.dataset.v,10)<=v));
+    const lab=$('#rt-'+k); if(lab) lab.textContent=LABELS[v];
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    const sb=$('#saveBtn'); if(sb) sb.disabled=!CRIT.every(c=>FORM[c.key]);
+  },
+  rec(el){
+    const v=el.dataset.v==='yes';
+    FORM.rec=FORM.rec===v?null:v;
+    $$('.recrow .btn').forEach(b=>b.classList.toggle('on',FORM.rec!==null&&((b.dataset.v==='yes')===FORM.rec)));
+  },
+  tag(el){
+    const id=el.dataset.id, i=FORM.tags.indexOf(id);
+    if(i>=0) FORM.tags.splice(i,1);
+    else { if(FORM.tags.length>=TAG_MAX) return toast(`Höchstens ${TAG_MAX} Tags`); FORM.tags.push(id); }
+    el.classList.toggle('on',FORM.tags.includes(id));
+  },
+  async 'save-rating'(el){
+    if(!CRIT.every(c=>FORM[c.key])) return toast('Bitte alle Aufgaben ankreuzen');
+    FORM.comment=(($('#comment')?.value)||'').trim().slice(0,300);
+    FORM.subject=$('#subjectSel')?$('#subjectSel').value:(FORM.subject||'');
+    el.disabled=true;
+    try{
+      const d={tags:FORM.tags,rec:FORM.rec,comment:FORM.comment,subject:FORM.subject};
+      CRIT.forEach(c=>{ d[c.key]=FORM[c.key]; });
+      await api.saveRating(FORM.tid,d);
+      stampPop('Bewertet');
+      openSheet('detail',FORM.tid);
+    }catch(err){ el.disabled=false; toast('Speichern fehlgeschlagen: '+errMsg(err)); }
+  },
+  async 'del-rating'(){
+    const m=myRating(FORM.tid); if(!m) return;
+    if(!confirm('Deine Bewertung löschen?')) return;
+    try{ await api.deleteRating(m.id); toast('Bewertung gelöscht'); openSheet('detail',FORM.tid); }
+    catch(err){ toast('Löschen fehlgeschlagen: '+errMsg(err)); }
+  },
+
+  lesson(el){
+    const tid=el.dataset.id; if(!S.A.has(tid)) return;
+    const ex=myLessonToday(tid);
+    FORM_L={tid,points:ex?Number(ex.points)||0:0,from:(SHEET&&SHEET.type==='detail')?'detail':'list'};
+    openSheet('lesson',tid);
+  },
+  lpreset(el){ FORM_L.points=parseInt(el.dataset.v,10); updateLessonUI(); },
+  'lesson-back'(){ lessonBack(); },
+  async 'save-lesson'(el){
+    el.disabled=true;
+    try{
+      await api.saveLesson(FORM_L.tid,FORM_L.points);
+      toast(`Stunde gespeichert: ${fmtPts(FORM_L.points)}`);
+      lessonBack();
+    }catch(err){ el.disabled=false; toast('Speichern fehlgeschlagen: '+errMsg(err)); }
+  },
+  async 'del-lesson'(){
+    const ex=myLessonToday(FORM_L.tid); if(!ex) return;
+    try{ await api.deleteLesson(ex.id); toast('Heutige Stunde gelöscht'); lessonBack(); }
+    catch(err){ toast('Löschen fehlgeschlagen: '+errMsg(err)); }
+  },
+
+  'cmp-add'(el){
+    const id=el.dataset.id;
+    if(!S.cmp.includes(id)){ if(S.cmp.length>=3) S.cmp.shift(); S.cmp.push(id); }
+    closeSheet(); S.tab='compare'; renderMain(true); window.scrollTo({top:0});
+  },
+  'cmp-toggle'(el){
+    const id=el.dataset.id;
+    if(S.cmp.includes(id)) S.cmp=S.cmp.filter(x=>x!==id);
+    else { if(S.cmp.length>=3) return toast('Höchstens 3 Lehrer gleichzeitig'); S.cmp.push(id); }
+    renderMain(true);
+  },
+
+  rename(){ NAME_MSG=''; openSheet('name'); },
+  async 'save-name'(el){
+    const v=($('#nameIn').value||'').trim().replace(/\s+/g,' ');
+    if(v.length<2) return toast('Mindestens 2 Zeichen bitte');
+    const isBossName=v.toLowerCase()==='boss';
+    const nm=isBossName?'BOSS':v;
+    if(S.cloud&&isBossName){
+      if(!S.ready||!S.authed||S.mode==='error') return toast('Verbindung wird aufgebaut. Gleich noch mal versuchen.');
+      if(S.boss&&S.boss.uid!==UID) return toast('Der Name BOSS ist schon vergeben');
+      if(!S.boss){
+        if(el) el.disabled=true;
+        try{ await claimBoss(); toast('Du bist jetzt BOSS'); }
+        catch(err){ if(el) el.disabled=false; return toast('BOSS konnte nicht vergeben werden: '+errMsg(err)); }
+      }
+    }
+    UNAME=nm; ls.set('lc_name',nm); NAME_MSG=''; closeSheet();
+    if(!(S.cloud&&isBossName)) toast('Hallo '+nm);
+    if(S.tab==='me') renderMain(false);
+  },
+
+  'save-cfg'(){
+    const cfg=parseCfg($('#cfgIn').value);
+    if(!cfg) return toast('Konfiguration nicht lesbar (apiKey/projectId fehlen)');
+    ls.set('lc_fbcfg',JSON.stringify(cfg)); location.reload();
+  },
+  'reset-cfg'(){ if(!confirm('Verbindung trennen und zum lokalen Modus wechseln?')) return; ls.del('lc_fbcfg'); location.reload(); },
+  async 'copy-rules'(){ try{ await navigator.clipboard.writeText(RULES); toast('Regeln kopiert'); }catch{ toast('Kopieren nicht möglich. Bitte manuell markieren.'); } },
+
+  export(){
+    const rows=[['Lehrer','Fach',...CRIT.map(c=>c.name),'Gesamt','Tags','Weiterempfehlung','Kommentar','Von','Datum']];
+    S.ratings.forEach(r=>{
+      const a=S.A.get(r.teacherId); if(!a) return;
+      rows.push([a.t.name,r.subject||'',...CRIT.map(c=>r[c.key]??''),fmt(ovr(r),2),(r.tags||[]).map(tagLabel).join(' | '),typeof r.rec==='boolean'?(r.rec?'ja':'nein'):'',r.comment||'',r.userName||'',new Date(ts(r)).toISOString().slice(0,10)]);
+    });
+    if(rows.length<2) return toast('Noch keine Bewertungen zum Exportieren');
+    download('lehrer-bewertungen.csv',rows);
+  },
+  'export-lessons'(){
+    const rows=[['Lehrer','Datum','Punkte','Von']];
+    S.lessons.forEach(l=>{ const a=S.A.get(l.teacherId); if(!a) return; rows.push([a.t.name,l.day,l.points,l.userName||'']); });
+    if(rows.length<2) return toast('Noch keine Stunden zum Exportieren');
+    download('lehrer-stunden.csv',rows);
+  },
+  async share(){
+    const url=location.href.split('#')[0];
+    try{
+      if(navigator.share) await navigator.share({title:'Lehrer-Check',url});
+      else { await navigator.clipboard.writeText(url); toast('Link kopiert'); }
+    }catch{}
+  },
+  'demo-load'(){ loadDemo(); toast('Demo-Daten geladen'); },
+  'demo-clear'(){ clearDemo(); toast('Demo-Daten entfernt'); }
+};
+function download(name,rows){
+  const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]'); if(!el) return;
+  const f=H[el.dataset.act]; if(f) f(el,e);
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.id==='q'){ S.q=t.value; renderList(false); }
+  else if(t.id==='comment'&&FORM){ FORM.comment=t.value; const c=$('#ccount'); if(c) c.textContent=t.value.length; }
+  else if(t.id==='lRange'&&FORM_L){ FORM_L.points=parseInt(t.value,10)||0; updateLessonUI(); }
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='sort'){ S.sort=t.value; renderList(true); }
+  else if(t.id==='subjectSel'&&FORM){ FORM.subject=t.value; }
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&SHEET&&!(SHEET.type==='name'&&!UNAME)){ closeSheet(); return; }
+  if(e.key==='Enter'&&e.target.id==='nameIn'){ e.preventDefault(); H['save-name'](null); }
+  if(e.target.id==='tSubj'&&(e.key==='Enter'||e.key===',')){ e.preventDefault(); H['subj-add'](); }
+});
+
+/* ---------- Start ---------- */
+(function init(){
+  const cfg=getCfg();
+  S.cloud=!!cfg; S.mode=cfg?'cloud':'local';
+  computeAll(); updateMode(); renderBanner(); renderMain(true);
+  if(cfg) startCloud(cfg); else startLocal();
+  if(!UNAME) openSheet('name');
+})();
+</script>
+</body>
+</html>
